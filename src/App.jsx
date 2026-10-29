@@ -15,6 +15,29 @@ export default function App() {
   const [password, setPassword] = useState('')
   const [accessCode, setAccessCode] = useState('')
   const [admin, setAdmin] = useState(false)
+  const [theme, setTheme] = useState(() => {
+    try {
+      return window.localStorage.getItem('tp-theme') || 'light'
+    } catch {
+      return 'light'
+    }
+  })
+  const [activeSubject, setActiveSubject] = useState(null)
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    try {
+      window.localStorage.setItem('tp-theme', theme)
+    } catch {
+      // storage unavailable; theme still applies for this session
+    }
+  }, [theme])
+
+  useEffect(() => {
+    if (!activeSubject && content && content.subjects.length > 0) {
+      setActiveSubject(content.subjects[0])
+    }
+  }, [content, activeSubject])
 
   const refresh = useCallback(async () => {
     const c = await loadContent()
@@ -124,42 +147,81 @@ export default function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand">
-          <div className="brand-logo">VU</div>
-          <div>
-            <h1>VU Test Papers</h1>
-            <p className="tagline">Midterm practice · Lectures 1–22</p>
+        <div className="topbar-row">
+          <div className="brand">
+            <div className="brand-logo">VU</div>
+            <div>
+              <h1>VU Test Papers</h1>
+              <p className="tagline">Midterm practice · Lectures 1–22</p>
+            </div>
+          </div>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="theme-toggle"
+              title="Toggle dark mode"
+              onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            >
+              {theme === 'light' ? '🌙' : '☀️'}
+            </button>
+            {user && (
+              <div className="user-badge">
+                <div className="user-avatar">{user.email[0].toUpperCase()}</div>
+                <div className="user-meta">
+                  <span className="user-email">{user.email}</span>
+                  <span className="user-role">{admin ? 'ADMIN' : 'STUDENT'}</span>
+                </div>
+              </div>
+            )}
+            {user ? (
+              <button onClick={logout}>Logout</button>
+            ) : (
+              <button onClick={() => setView({ name: 'auth' })}>Login / Signup</button>
+            )}
           </div>
         </div>
-        <div className="nav">
+        <nav className="nav">
           <button
             className={view.name === 'subjects' ? 'nav-active' : ''}
             onClick={() => setView({ name: 'subjects' })}
           >
-            Subjects
+            🏠 Dashboard
           </button>
-          {user && (
-            <button
-              className={view.name === 'progress' ? 'nav-active' : ''}
-              onClick={() => setView({ name: 'progress' })}
-            >
-              My progress
-            </button>
-          )}
+          <button
+            className={view.name === 'mcq' ? 'nav-active' : ''}
+            onClick={() => {
+              if (activeSubject) setView({ name: 'mcq', subject: activeSubject })
+              else setView({ name: 'subjects' })
+            }}
+          >
+            ⚡ EduNexus MCQs
+          </button>
+          <button
+            className={view.name === 'subj' ? 'nav-active' : ''}
+            onClick={() => {
+              if (activeSubject) setView({ name: 'subj', subject: activeSubject })
+              else setView({ name: 'subjects' })
+            }}
+          >
+            📝 Paper Exam
+          </button>
           {admin && (
             <button
               className={view.name === 'admin' ? 'nav-active' : ''}
               onClick={() => setView({ name: 'admin' })}
             >
-              Admin
+              ⚙️ Admin Panel
             </button>
           )}
-          {user ? (
-            <button onClick={logout}>Logout ({user.email})</button>
-          ) : (
-            <button onClick={() => setView({ name: 'auth' })}>Login / Signup</button>
+          {user && (
+            <button
+              className={view.name === 'progress' ? 'nav-active' : ''}
+              onClick={() => setView({ name: 'progress' })}
+            >
+              📊 Result & Stats
+            </button>
           )}
-        </div>
+        </nav>
       </header>
       <main>
         {!user && view.name !== 'auth' && (
@@ -227,6 +289,8 @@ export default function App() {
         {user && view.name === 'subjects' && (
           <SubjectsList
             content={content}
+            activeSubject={activeSubject}
+            onSelect={setActiveSubject}
             onTest={(kind, subject) => setView({ name: kind, subject })}
           />
         )}
@@ -264,21 +328,109 @@ export default function App() {
         questions are present in past-paper banks and core to the handout; no
         per-question past-paper frequency is claimed.
       </footer>
+      <nav className="bottom-nav">
+        <button
+          className={view.name === 'subjects' ? 'active' : ''}
+          onClick={() => setView({ name: 'subjects' })}
+        >
+          <span>🏠</span>
+          <span>Home</span>
+        </button>
+        <button
+          className={view.name === 'mcq' ? 'active' : ''}
+          onClick={() => {
+            if (activeSubject) setView({ name: 'mcq', subject: activeSubject })
+            else setView({ name: 'subjects' })
+          }}
+        >
+          <span>⚡</span>
+          <span>MCQs</span>
+        </button>
+        <button
+          className={view.name === 'subj' ? 'active' : ''}
+          onClick={() => {
+            if (activeSubject) setView({ name: 'subj', subject: activeSubject })
+            else setView({ name: 'subjects' })
+          }}
+        >
+          <span>📝</span>
+          <span>Paper</span>
+        </button>
+        {admin && (
+          <button
+            className={view.name === 'admin' ? 'active' : ''}
+            onClick={() => setView({ name: 'admin' })}
+          >
+            <span>⚙️</span>
+            <span>Admin</span>
+          </button>
+        )}
+        {user && (
+          <button
+            className={view.name === 'progress' ? 'active' : ''}
+            onClick={() => setView({ name: 'progress' })}
+          >
+            <span>📊</span>
+            <span>Stats</span>
+          </button>
+        )}
+      </nav>
     </div>
   )
 }
 
-function SubjectsList({ content, onTest }) {
+function SubjectsList({ content, activeSubject, onSelect, onTest }) {
   return (
     <div>
-      <h2>Subjects</h2>
+      <div className="hero">
+        <div className="hero-inner">
+          <span className="hero-eyebrow">✨ Virtual University Exam Suite</span>
+          <h2>Modern Paper Exam &amp; EduNexus MCQs</h2>
+          <p>
+            Experience lightning-fast single-question MCQ testing with instant
+            review mode and full MS Word-like formatting for subjective papers.
+          </p>
+          <div className="actions">
+            <button
+              className="primary"
+              disabled={!activeSubject}
+              onClick={() => activeSubject && onTest('mcq', activeSubject)}
+            >
+              Start EduNexus MCQ Test ⚡
+            </button>
+            <button
+              className="hero-secondary"
+              disabled={!activeSubject}
+              onClick={() => activeSubject && onTest('subj', activeSubject)}
+            >
+              Take Subjective Exam 📝
+            </button>
+          </div>
+          {activeSubject && (
+            <p className="hero-active">
+              Active subject: {activeSubject.code} — {activeSubject.name}
+            </p>
+          )}
+        </div>
+      </div>
+      <h2>Select Active Course / Subject</h2>
       <div className="subjects-grid">
       {content.subjects.map((s) => {
         const nMcq = content.mcqs.filter((m) => m.subject_id === s.id).length
         const nShort = content.shorts.filter((q) => q.subject_id === s.id).length
         const nLong = content.longs.filter((q) => q.subject_id === s.id).length
+        const selected = activeSubject && activeSubject.id === s.id
         return (
-          <div key={s.id} className="card subject-card">
+          <div
+            key={s.id}
+            className={`card subject-card${selected ? ' selected' : ''}`}
+            onClick={() => onSelect(s)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onSelect(s)
+            }}
+          >
             <div className="subject-avatar">{s.code.slice(0, 3)}</div>
             <h3>
               {s.code} — {s.name}
@@ -289,11 +441,28 @@ function SubjectsList({ content, onTest }) {
                 ? ' (no verified long section for this midterm)'
                 : ''}
             </p>
+            <div className="subject-foot">
+              <span>{selected ? 'Selected ✓' : 'Select & Launch'}</span>
+              <span>→</span>
+            </div>
             <div className="actions">
-              <button className="primary" onClick={() => onTest('mcq', s)}>
+              <button
+                className="primary"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTest('mcq', s)
+                }}
+              >
                 MCQ test
               </button>
-              <button onClick={() => onTest('subj', s)}>Subjective test</button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTest('subj', s)
+                }}
+              >
+                Subjective test
+              </button>
             </div>
           </div>
         )
@@ -340,9 +509,60 @@ function Progress({ user, content }) {
     bySubject[key].push(a)
   })
 
+  const scored = attempts.filter((a) => a.total > 0)
+  const totalExams = attempts.length
+  const avgPct = scored.length
+    ? Math.round(
+        (scored.reduce((n, a) => n + (a.score / a.total) * 100, 0) / scored.length) * 10,
+      ) / 10
+    : 0
+  const bestPct = scored.length
+    ? Math.max(...scored.map((a) => Math.round((a.score / a.total) * 100)))
+    : 0
+
   return (
     <div>
-      <h2>My progress</h2>
+      <div className="card stats-header">
+        <div>
+          <span className="mcq-eyebrow">Academic Performance</span>
+          <h2>Student Exam History &amp; Stats</h2>
+        </div>
+        <span className="stats-pill">Saved attempts</span>
+      </div>
+      <div className="stat-grid">
+        <div className="stat-card stat-indigo">
+          <span className="stat-label">Total Exams Taken</span>
+          <strong>{totalExams}</strong>
+        </div>
+        <div className="stat-card stat-violet">
+          <span className="stat-label">Average Percentage</span>
+          <strong>{scored.length ? `${avgPct}%` : '—'}</strong>
+        </div>
+        <div className="stat-card stat-emerald">
+          <span className="stat-label">Best Score</span>
+          <strong>{scored.length ? `${bestPct}%` : '—'}</strong>
+        </div>
+      </div>
+      <div className="card">
+        <h3>Recent Test Transcripts</h3>
+        <div className="transcripts">
+          {attempts.slice(0, 10).map((a) => (
+            <div key={a.id} className="transcript-row">
+              <div>
+                <strong>
+                  {a.subject_code || 'Unknown'} —{' '}
+                  {a.type === 'mcq' ? 'MCQ Test' : 'Subjective Paper'}
+                </strong>
+                <div className="muted">{new Date(a.created_at).toLocaleString()}</div>
+              </div>
+              <strong className="transcript-score">
+                {a.score} / {a.total}
+                {a.total > 0 ? ` (${Math.round((a.score / a.total) * 100)}%)` : ''}
+              </strong>
+            </div>
+          ))}
+        </div>
+      </div>
       {weak.length > 0 && (
         <div className="card">
           <h3>Weak topics (lectures with most wrong MCQ answers)</h3>

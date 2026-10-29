@@ -34,6 +34,8 @@ export function McqTest({ user, subject, mcqs, onDone }) {
   const elapsed = useElapsed(!submitted)
   const answered = Object.keys(answers).length
   const [current, setCurrent] = useState(0)
+  const [bookmarked, setBookmarked] = useState({})
+  const [showExplanation, setShowExplanation] = useState(false)
   const currentQ = mcqs[Math.min(current, mcqs.length - 1)]
 
   const score = useMemo(() => {
@@ -88,6 +90,17 @@ export function McqTest({ user, subject, mcqs, onDone }) {
       </button>
       {!submitted && (
       <div className="exam-bar">
+        <div className="mcq-engine-head">
+          <div>
+            <span className="mcq-eyebrow">EduNexus MCQ Engine</span>
+            <h2>
+              {subject.code} — {subject.name}
+            </h2>
+          </div>
+          <span className="mcq-count">
+            {current + 1} of {mcqs.length}
+          </span>
+        </div>
         <div className="exam-meta">
           <span>
             {answered} / {mcqs.length} answered
@@ -108,12 +121,16 @@ export function McqTest({ user, subject, mcqs, onDone }) {
             else if (submitted && mine !== undefined) cls += ' palette-wrong'
             else if (qi === current) cls += ' palette-current'
             else if (mine !== undefined) cls += ' palette-done'
+            else if (bookmarked[qi]) cls += ' palette-marked'
             return (
               <button
                 key={q.id}
                 type="button"
                 className={cls}
-                onClick={() => setCurrent(qi)}
+                onClick={() => {
+                  setCurrent(qi)
+                  setShowExplanation(false)
+                }}
               >
                 {qi + 1}
               </button>
@@ -134,12 +151,17 @@ export function McqTest({ user, subject, mcqs, onDone }) {
       {!submitted && (
         <section className="card mcq-play" aria-label={`Question ${current + 1}`}>
           <div className="mcq-between">
-            <span className="mcq-eyebrow">
-              Question {current + 1} of {mcqs.length}
-            </span>
-            <span className="mcq-pill">
-              {subject.code} · {subject.term}
-            </span>
+            <span className="mcq-qbadge">Question #{current + 1}</span>
+            <button
+              type="button"
+              className={`mark-btn${bookmarked[current] ? ' active' : ''}`}
+              onClick={() =>
+                setBookmarked((b) => ({ ...b, [current]: !b[current] }))
+              }
+              title="Bookmark question"
+            >
+              {bookmarked[current] ? '★ Bookmarked' : '☆ Mark'}
+            </button>
           </div>
           <div className="mcq-progress">
             <span style={{ width: `${((current + 1) / mcqs.length) * 100}%` }} />
@@ -189,14 +211,31 @@ export function McqTest({ user, subject, mcqs, onDone }) {
             </p>
           )}
           {answers[currentQ.id] !== undefined && currentQ.explanation && (
-            <div className="mcq-explain">
-              <Tex text={currentQ.explanation} />
+            <div className="mcq-explain-wrap">
+              <button
+                type="button"
+                className="explain-toggle"
+                onClick={() => setShowExplanation((v) => !v)}
+              >
+                {showExplanation
+                  ? 'Hide Explanation ▲'
+                  : '💡 Show Instant Explanation ▼'}
+              </button>
+              {showExplanation && (
+                <div className="mcq-explain">
+                  <strong>Explanation: </strong>
+                  <Tex text={currentQ.explanation} />
+                </div>
+              )}
             </div>
           )}
           <div className="mcq-actions">
             <button
               type="button"
-              onClick={() => setCurrent((c) => Math.max(0, c - 1))}
+              onClick={() => {
+                setCurrent((c) => Math.max(0, c - 1))
+                setShowExplanation(false)
+              }}
               disabled={current === 0}
             >
               ← Previous
@@ -204,7 +243,10 @@ export function McqTest({ user, subject, mcqs, onDone }) {
             <button
               type="button"
               className="primary"
-              onClick={() => setCurrent((c) => Math.min(mcqs.length - 1, c + 1))}
+              onClick={() => {
+                setCurrent((c) => Math.min(mcqs.length - 1, c + 1))
+                setShowExplanation(false)
+              }}
               disabled={current === mcqs.length - 1}
             >
               Next →
@@ -266,13 +308,20 @@ export function SubjTest({ user, subject, shorts, longs, onDone }) {
   const [marks, setMarks] = useState({})
   const [submitted, setSubmitted] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
-  const elapsed = useElapsed(!submitted)
+  const [active, setActive] = useState(0)
+  const [timeLeft, setTimeLeft] = useState(30 * 60)
   const plainText = (html) =>
     String(html || '')
       .replace(/<[^>]*>/g, '')
       .replace(/&nbsp;/g, ' ')
       .trim()
   const writtenCount = all.filter((q) => plainText(written[q.id]) !== '').length
+
+  useEffect(() => {
+    if (submitted || timeLeft <= 0) return undefined
+    const t = setInterval(() => setTimeLeft((v) => Math.max(0, v - 1)), 1000)
+    return () => clearInterval(t)
+  }, [submitted, timeLeft])
 
   async function submit() {
     const unmarked = all.filter((q) => !marks[q.id]).length
@@ -312,52 +361,40 @@ export function SubjTest({ user, subject, shorts, longs, onDone }) {
       }
     : null
 
+  const currentQ = all[Math.min(active, all.length - 1)]
+  const timeUp = timeLeft <= 0
+
   return (
     <div>
       <button className="link" onClick={onDone}>
         ← Back to subjects
       </button>
-      <h2>
-        {subject.code} — Subjective Test ({all.length} questions)
-      </h2>
-      <p className="muted">
-        Write your answer in the Word-like editor, then reveal the model answer
-        and mark yourself honestly: right, partial, or wrong.
-      </p>
-      <div className="exam-bar">
-        <div className="exam-meta">
-          <span>
-            {writtenCount} / {all.length} written ·{' '}
-            {Object.keys(marks).length} / {all.length} self-marked
-          </span>
-          <span className="exam-timer">⏱ {fmtTime(elapsed)}</span>
+      {!submitted && (
+        <div className="paper-chrome">
+          <div>
+            <span className="mcq-eyebrow">Virtual University Paper Exam</span>
+            <h2>
+              {subject.code} — {subject.name}
+            </h2>
+          </div>
+          <div className="paper-chrome-actions">
+            <span
+              className={`countdown${timeLeft < 300 && !timeUp ? ' low' : ''}${timeUp ? ' up' : ''}`}
+            >
+              ⏱ {timeUp ? 'Time up' : `Time Left: ${fmtTime(timeLeft)}`}
+            </span>
+            <button type="button" className="paper-submit" onClick={submit}>
+              Final Submit 🚀
+            </button>
+          </div>
         </div>
-        <div className="exam-progress">
-          <div
-            className="exam-progress-fill"
-            style={{ width: `${all.length ? Math.round((writtenCount / all.length) * 100) : 0}%` }}
-          />
+      )}
+      {!submitted && timeUp && (
+        <div className="result time-up">
+          Time is up. Your answers are still here — submit now to save this
+          attempt.
         </div>
-        <div className="palette">
-          {all.map((q, qi) => {
-            let cls = 'palette-btn'
-            if (submitted && marks[q.id] === 'right') cls += ' palette-right'
-            else if (submitted && marks[q.id] === 'partial') cls += ' palette-partial'
-            else if (submitted && marks[q.id] === 'wrong') cls += ' palette-wrong'
-            else if (plainText(written[q.id]) !== '') cls += ' palette-done'
-            return (
-              <button
-                key={q.id}
-                type="button"
-                className={cls}
-                onClick={() => scrollToQuestion(qi)}
-              >
-                {qi + 1}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      )}
       {submitted && counts && (
         <div className="result score-card">
           <div className="score-big">
@@ -367,53 +404,124 @@ export function SubjTest({ user, subject, shorts, longs, onDone }) {
           <div className="muted">{savedMsg}</div>
         </div>
       )}
-      {all.map((q, qi) => (
-        <div key={q.id} id={`exam-q-${qi + 1}`} className="card exam-q">
-          <p>
-            <strong>
-              Q{qi + 1} ({q.kind}, {q.marks} marks). <Tex text={q.question} />
-            </strong>{' '}
-            <span className="muted">Lecture {q.lecture_no}</span>
-          </p>
-          <RichEditor
-            value={written[q.id] || ''}
-            onChange={(html) => setWritten((w) => ({ ...w, [q.id]: html }))}
-            placeholder="Write your answer here…"
-            disabled={submitted}
-          />
-          {!revealed[q.id] ? (
-            <button onClick={() => setRevealed((r) => ({ ...r, [q.id]: true }))}>
-              Show model answer
-            </button>
-          ) : (
-            <div className="model">
-              <strong>Model answer:</strong>{' '}
-              <Tex text={q.answer} />
-              {q.table && <TruthTable table={q.table} />}
-            </div>
-          )}
-          {revealed[q.id] && !submitted && (
-            <div className="marks">
-              <span>Self-mark: </span>
-              {['right', 'partial', 'wrong'].map((m) => (
-                <button
-                  key={m}
-                  className={marks[q.id] === m ? 'primary' : ''}
-                  onClick={() => setMarks((x) => ({ ...x, [q.id]: m }))}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
       {!submitted && (
-        <button className="primary" onClick={submit}>
-          Submit test
-        </button>
+        <div className="paper-grid">
+          <aside className="paper-side card">
+            <p className="mcq-eyebrow">Subjective Questions</p>
+            <div className="paper-side-list">
+              {all.map((q, qi) => {
+                const answeredQ = plainText(written[q.id]) !== ''
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    className={`paper-side-btn${qi === active ? ' active' : ''}`}
+                    onClick={() => setActive(qi)}
+                  >
+                    <span>
+                      Q.{qi + 1} ({q.marks} Marks)
+                    </span>
+                    <span>{answeredQ ? '✅' : '⏳'}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="muted">
+              {writtenCount} / {all.length} written ·{' '}
+              {Object.keys(marks).length} / {all.length} self-marked
+            </p>
+          </aside>
+          <div className="paper-workspace">
+            <div className="card paper-question">
+              <div className="mcq-between">
+                <span className="mcq-qbadge">Question #{active + 1}</span>
+                <span className="muted">Marks: {currentQ.marks}</span>
+              </div>
+              <h3>
+                <Tex text={currentQ.question} />
+              </h3>
+              <p className="muted">
+                {currentQ.kind} · Lecture {currentQ.lecture_no}
+              </p>
+              <div className="editor-label">
+                <span>MS Word-Like Rich Text Editor</span>
+                <span>Supports Bold, Italic, Lists, Headings</span>
+              </div>
+              <RichEditor
+                value={written[currentQ.id] || ''}
+                onChange={(html) => setWritten((w) => ({ ...w, [currentQ.id]: html }))}
+                placeholder="Write your answer here…"
+                disabled={submitted}
+              />
+              {!revealed[currentQ.id] ? (
+                <button
+                  onClick={() => setRevealed((r) => ({ ...r, [currentQ.id]: true }))}
+                >
+                  Show model answer
+                </button>
+              ) : (
+                <div className="model">
+                  <strong>Model answer:</strong> <Tex text={currentQ.answer} />
+                  {currentQ.table && <TruthTable table={currentQ.table} />}
+                </div>
+              )}
+              {revealed[currentQ.id] && !submitted && (
+                <div className="marks">
+                  <span>Self-mark: </span>
+                  {['right', 'partial', 'wrong'].map((m) => (
+                    <button
+                      key={m}
+                      className={marks[currentQ.id] === m ? 'primary' : ''}
+                      onClick={() => setMarks((x) => ({ ...x, [currentQ.id]: m }))}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="mcq-actions">
+                <button
+                  type="button"
+                  onClick={() => setActive((a) => Math.max(0, a - 1))}
+                  disabled={active === 0}
+                >
+                  ← Previous Question
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => setActive((a) => Math.min(all.length - 1, a + 1))}
+                  disabled={active === all.length - 1}
+                >
+                  Next Question →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
-      {submitted && <button onClick={onDone}>Back to subjects</button>}
+      {submitted && (
+        <div>
+          {all.map((q, qi) => (
+            <div key={q.id} className="card">
+              <p>
+                <strong>
+                  Q{qi + 1} ({q.kind}, {q.marks} marks). <Tex text={q.question} />
+                </strong>{' '}
+                <span className="muted">Lecture {q.lecture_no}</span>
+              </p>
+              <p>
+                Self-mark: <strong>{marks[q.id] || 'not marked'}</strong>
+              </p>
+              <div className="model">
+                <strong>Model answer:</strong> <Tex text={q.answer} />
+                {q.table && <TruthTable table={q.table} />}
+              </div>
+            </div>
+          ))}
+          <button onClick={onDone}>Back to subjects</button>
+        </div>
+      )}
     </div>
   )
 }
