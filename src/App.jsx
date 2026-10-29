@@ -42,20 +42,6 @@ export default function App() {
     refresh()
   }, [refresh])
 
-  useEffect(() => {
-    if (!user) {
-      setAdmin(false)
-      return
-    }
-    let live = true
-    fetchIsAdmin(user).then((v) => {
-      if (live) setAdmin(v)
-    })
-    return () => {
-      live = false
-    }
-  }, [user])
-
   async function handleAuth(e) {
     e.preventDefault()
     setAuthMsg('')
@@ -121,17 +107,53 @@ export default function App() {
     )
   }
 
+  useEffect(() => {
+    if (!user) {
+      setAdmin(false)
+      return
+    }
+    let live = true
+    fetchIsAdmin(user).then((v) => {
+      if (live) setAdmin(v)
+    })
+    return () => {
+      live = false
+    }
+  }, [user])
+
   return (
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <h1>VU Test Papers</h1>
-          <p className="tagline">Midterm practice · Lectures 1–22</p>
+          <div className="brand-logo">VU</div>
+          <div>
+            <h1>VU Test Papers</h1>
+            <p className="tagline">Midterm practice · Lectures 1–22</p>
+          </div>
         </div>
         <div className="nav">
-          <button onClick={() => setView({ name: 'subjects' })}>Subjects</button>
-          {user && <button onClick={() => setView({ name: 'progress' })}>My progress</button>}
-          {admin && <button onClick={() => setView({ name: 'admin' })}>Admin</button>}
+          <button
+            className={view.name === 'subjects' ? 'nav-active' : ''}
+            onClick={() => setView({ name: 'subjects' })}
+          >
+            Subjects
+          </button>
+          {user && (
+            <button
+              className={view.name === 'progress' ? 'nav-active' : ''}
+              onClick={() => setView({ name: 'progress' })}
+            >
+              My progress
+            </button>
+          )}
+          {admin && (
+            <button
+              className={view.name === 'admin' ? 'nav-active' : ''}
+              onClick={() => setView({ name: 'admin' })}
+            >
+              Admin
+            </button>
+          )}
           {user ? (
             <button onClick={logout}>Logout ({user.email})</button>
           ) : (
@@ -257,6 +279,7 @@ function SubjectsList({ content, onTest }) {
         const nLong = content.longs.filter((q) => q.subject_id === s.id).length
         return (
           <div key={s.id} className="card subject-card">
+            <div className="subject-avatar">{s.code.slice(0, 3)}</div>
             <h3>
               {s.code} — {s.name}
             </h3>

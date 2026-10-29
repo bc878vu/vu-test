@@ -106,6 +106,7 @@ export function McqTest({ user, subject, mcqs, onDone }) {
             let cls = 'palette-btn'
             if (submitted && mine === q.correct_index) cls += ' palette-right'
             else if (submitted && mine !== undefined) cls += ' palette-wrong'
+            else if (qi === current) cls += ' palette-current'
             else if (mine !== undefined) cls += ' palette-done'
             return (
               <button
