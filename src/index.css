@@ -1,0 +1,54 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f5fb;
+  color: #1c2430;
+}
+.shell { max-width: 860px; margin: 0 auto; padding: 0 16px 40px; }
+header {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  align-items: center; justify-content: space-between;
+  padding: 16px 0;
+}
+header h1 { margin: 0; font-size: 24px; }
+.nav { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  border: 1px solid #c7cede; background: #fff; color: #1c2430;
+  padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+button.primary { background: #2f4fd6; border-color: #2f4fd6; color: #fff; }
+button.link { border: none; background: none; padding: 0; color: #2f4fd6; }
+button:disabled { opacity: 0.6; cursor: default; }
+.card {
+  background: #fff; border: 1px solid #dde1ef; border-radius: 12px;
+  padding: 16px; margin: 12px 0;
+}
+.card.ok { border-color: #3a9d5d; }
+.card.bad { border-color: #d65a4a; }
+.row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.muted { color: #667085; font-size: 14px; }
+.notice, .result {
+  background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 10px;
+  padding: 12px 14px; margin: 12px 0;
+}
+.field { display: block; margin: 10px 0; }
+.field span { display: block; font-weight: 600; margin-bottom: 4px; }
+.field input, .field select, textarea, select {
+  width: 100%; padding: 9px 10px; border: 1px solid #c7cede;
+  border-radius: 8px; font-size: 15px; font-family: inherit;
+}
+textarea { resize: vertical; }
+.opt { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
+.opt input { margin-top: 4px; }
+.review { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #dde1ef; }
+.model { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin: 10px 0; }
+.marks { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+table.truth-table { border-collapse: collapse; margin: 10px 0; }
+table.truth-table th, table.truth-table td {
+  border: 1px solid #c7cede; padding: 6px 12px; text-align: center;
+}
+table.truth-table th { background: #eef2ff; }
+footer { margin-top: 24px; font-size: 13px; }
+.katex { font-size: 1.02em; }
