@@ -99,4 +99,88 @@ create policy tp_settings_admin_manage_v2
   using (public.tp_is_admin())
   with check (public.tp_is_admin());
 
+-- Restrictive write policies ensure older permissive base-schema policies
+-- cannot accidentally grant students insert/update/delete access.
+-- Existing SELECT policies remain untouched for student question access.
+
+drop policy if exists tp_subjects_admin_insert_only_v1 on public.tp_subjects;
+create policy tp_subjects_admin_insert_only_v1
+  on public.tp_subjects as restrictive for insert to authenticated
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_subjects_admin_update_only_v1 on public.tp_subjects;
+create policy tp_subjects_admin_update_only_v1
+  on public.tp_subjects as restrictive for update to authenticated
+  using (public.tp_is_admin())
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_subjects_admin_delete_only_v1 on public.tp_subjects;
+create policy tp_subjects_admin_delete_only_v1
+  on public.tp_subjects as restrictive for delete to authenticated
+  using (public.tp_is_admin());
+
+drop policy if exists tp_mcqs_admin_insert_only_v1 on public.tp_mcqs;
+create policy tp_mcqs_admin_insert_only_v1
+  on public.tp_mcqs as restrictive for insert to authenticated
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_mcqs_admin_update_only_v1 on public.tp_mcqs;
+create policy tp_mcqs_admin_update_only_v1
+  on public.tp_mcqs as restrictive for update to authenticated
+  using (public.tp_is_admin())
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_mcqs_admin_delete_only_v1 on public.tp_mcqs;
+create policy tp_mcqs_admin_delete_only_v1
+  on public.tp_mcqs as restrictive for delete to authenticated
+  using (public.tp_is_admin());
+
+drop policy if exists tp_short_questions_admin_insert_only_v1 on public.tp_short_questions;
+create policy tp_short_questions_admin_insert_only_v1
+  on public.tp_short_questions as restrictive for insert to authenticated
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_short_questions_admin_update_only_v1 on public.tp_short_questions;
+create policy tp_short_questions_admin_update_only_v1
+  on public.tp_short_questions as restrictive for update to authenticated
+  using (public.tp_is_admin())
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_short_questions_admin_delete_only_v1 on public.tp_short_questions;
+create policy tp_short_questions_admin_delete_only_v1
+  on public.tp_short_questions as restrictive for delete to authenticated
+  using (public.tp_is_admin());
+
+drop policy if exists tp_long_questions_admin_insert_only_v1 on public.tp_long_questions;
+create policy tp_long_questions_admin_insert_only_v1
+  on public.tp_long_questions as restrictive for insert to authenticated
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_long_questions_admin_update_only_v1 on public.tp_long_questions;
+create policy tp_long_questions_admin_update_only_v1
+  on public.tp_long_questions as restrictive for update to authenticated
+  using (public.tp_is_admin())
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_long_questions_admin_delete_only_v1 on public.tp_long_questions;
+create policy tp_long_questions_admin_delete_only_v1
+  on public.tp_long_questions as restrictive for delete to authenticated
+  using (public.tp_is_admin());
+
+drop policy if exists tp_settings_admin_insert_only_v1 on public.tp_settings;
+create policy tp_settings_admin_insert_only_v1
+  on public.tp_settings as restrictive for insert to authenticated
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_settings_admin_update_only_v1 on public.tp_settings;
+create policy tp_settings_admin_update_only_v1
+  on public.tp_settings as restrictive for update to authenticated
+  using (public.tp_is_admin())
+  with check (public.tp_is_admin());
+
+drop policy if exists tp_settings_admin_delete_only_v1 on public.tp_settings;
+create policy tp_settings_admin_delete_only_v1
+  on public.tp_settings as restrictive for delete to authenticated
+  using (public.tp_is_admin());
+
 commit;
