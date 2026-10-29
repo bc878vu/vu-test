@@ -12,6 +12,21 @@ function Field({ label, children }) {
   )
 }
 
+function JsonFileInput({ onText, label }) {
+  return (
+    <Field label={label || 'Or upload a JSON file'}>
+      <input
+        type="file"
+        accept=".json,application/json"
+        onChange={async (e) => {
+          const f = e.target.files && e.target.files[0]
+          if (f) onText(await f.text())
+        }}
+      />
+    </Field>
+  )
+}
+
 export default function Admin({ onReload }) {
   const [tab, setTab] = useState('subjects')
   const [content, setContent] = useState(null)
@@ -47,7 +62,7 @@ export default function Admin({ onReload }) {
     <div>
       <h2>Admin panel</h2>
       <div className="tabs">
-        {['subjects', 'mcqs', 'subjective', 'settings'].map((t) => (
+        {['subjects', 'mcqs', 'subjective', 'settings', 'admins'].map((t) => (
           <button
             key={t}
             className={tab === t ? 'primary' : ''}
@@ -71,6 +86,7 @@ export default function Admin({ onReload }) {
         <SubjectiveTab content={content} refresh={refresh} setMsg={setMsg} />
       )}
       {tab === 'settings' && <SettingsTab setMsg={setMsg} />}
+      {tab === 'admins' && <AdminsTab setMsg={setMsg} />}
     </div>
   )
 }
@@ -298,6 +314,7 @@ function McqsTab({ content, refresh, setMsg }) {
           Each item: {'{'}question, options (4 strings), correct_index (0–3),
           explanation, lecture_no{'}'}. LaTeX with $...$ is supported.
         </p>
+        <JsonFileInput onText={setBulk} label="Or upload a JSON file (fills the box below)" />
         <textarea rows={6} value={bulk} onChange={(e) => setBulk(e.target.value)} />
         <button className="primary" onClick={saveBulk}>
           Add all
@@ -321,6 +338,7 @@ function SubjectiveTab({ content, refresh, setMsg }) {
   const [subjectId, setSubjectId] = useState(content.subjects[0]?.id || '')
   const [kind, setKind] = useState('short')
   const [form, setForm] = useState({ id: null, lecture_no: '', marks: 3, question: '', answer: '' })
+  const [bulk, setBulk] = useState('')
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const table = kind === 'short' ? 'tp_short_questions' : 'tp_long_questions'
   const list = (kind === 'short' ? content.shorts : content.longs).filter(
@@ -348,6 +366,38 @@ function SubjectiveTab({ content, refresh, setMsg }) {
     else {
       setMsg('Question saved.')
       setForm({ id: null, lecture_no: '', marks: kind === 'short' ? 3 : 5, question: '', answer: '' })
+      refresh()
+    }
+  }
+
+  async function saveBulk() {
+    if (!subjectId) return setMsg('Pick a subject first.')
+    let arr
+    try {
+      arr = JSON.parse(bulk)
+    } catch {
+      return setMsg('Bulk text is not valid JSON.')
+    }
+    if (!Array.isArray(arr) || arr.length === 0) {
+      return setMsg('Bulk JSON must be a non-empty array.')
+    }
+    for (const item of arr) {
+      if (!item.question || !item.answer) {
+        return setMsg('Each bulk item needs question and answer.')
+      }
+    }
+    const rows = arr.map((item) => ({
+      subject_id: subjectId,
+      lecture_no: item.lecture_no || null,
+      marks: parseInt(item.marks, 10) || (kind === 'short' ? 3 : 5),
+      question: item.question,
+      answer: item.answer,
+    }))
+    const res = await supabase.from(table).insert(rows)
+    if (res.error) setMsg('Error: ' + res.error.message)
+    else {
+      setMsg(`${rows.length} questions added.`)
+      setBulk('')
       refresh()
     }
   }
@@ -415,6 +465,18 @@ function SubjectiveTab({ content, refresh, setMsg }) {
           </button>
         )}
       </form>
+      <div className="card">
+        <h3>Bulk add {kind} questions (paste a JSON array or upload a file)</h3>
+        <p className="muted">
+          Each item: {'{'}question, answer, marks (optional), lecture_no
+          (optional){'}'}. LaTeX with $...$ is supported.
+        </p>
+        <JsonFileInput onText={setBulk} label="Upload a JSON file (fills the box below)" />
+        <textarea rows={6} value={bulk} onChange={(e) => setBulk(e.target.value)} />
+        <button className="primary" onClick={saveBulk}>
+          Add all
+        </button>
+      </div>
       <h3>
         Existing {kind} questions ({list.length})
       </h3>
@@ -436,6 +498,106 @@ function SubjectiveTab({ content, refresh, setMsg }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function AdminsTab({ setMsg }) {
+  const [list, setList] = useState(null)
+  const [missing, setMissing] = useState(false)
+  const [email, setEmail] = useState('')
+
+  async function load() {
+    const res = await supabase
+      .from('tp_admins')
+      .select('email, created_at')
+      .order('created_at')
+    if (res.error) {
+      setMissing(true)
+      setList([])
+    } else {
+      setMissing(false)
+      setList(res.data || [])
+    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function add(e) {
+    e.preventDefault()
+    const em = email.trim().toLowerCase()
+    if (!em || !em.includes('@')) return setMsg('Enter a valid email address.')
+    const res = await supabase.from('tp_admins').insert({ email: em })
+    if (res.error) setMsg('Error: ' + res.error.message)
+    else {
+      setMsg('Admin added.')
+      setEmail('')
+      load()
+    }
+  }
+
+  async function remove(em) {
+    if (!window.confirm(`Remove admin ${em}? They will lose admin access immediately.`)) return
+    const res = await supabase.from('tp_admins').delete().eq('email', em)
+    if (res.error) setMsg('Error: ' + res.error.message)
+    else {
+      setMsg('Admin removed.')
+      load()
+    }
+  }
+
+  if (missing) {
+    return (
+      <div className="card">
+        <h3>Admins</h3>
+        <p>
+          The admins table is not set up yet. Run{' '}
+          <code>supabase-tp-admins.sql</code> in the Supabase SQL editor first,
+          then reload this page.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <form className="card" onSubmit={add}>
+        <h3>Add admin</h3>
+        <p className="muted">
+          veducator4@gmail.com is the root admin and always has access; it is
+          not listed here. Added admins can manage subjects, questions and
+          settings, including this list.
+        </p>
+        <Field label="Admin email">
+          <input value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+        <button className="primary" type="submit">
+          Add admin
+        </button>
+      </form>
+      <h3>Admins ({list === null ? '…' : list.length})</h3>
+      {list === null ? (
+        <p>Loading…</p>
+      ) : list.length === 0 ? (
+        <p className="card">No extra admins yet. Only the root admin has access.</p>
+      ) : (
+        list.map((a) => (
+          <div key={a.email} className="card row">
+            <div>
+              <strong>{a.email}</strong>{' '}
+              <span className="muted">
+                {a.created_at ? new Date(a.created_at).toLocaleString() : ''}
+              </span>
+            </div>
+            <div>
+              <button onClick={() => remove(a.email)}>Remove</button>
+            </div>
+          </div>
+        ))
+      )}
     </div>
   )
 }

@@ -33,6 +33,8 @@ export function McqTest({ user, subject, mcqs, onDone }) {
   const [savedMsg, setSavedMsg] = useState('')
   const elapsed = useElapsed(!submitted)
   const answered = Object.keys(answers).length
+  const [current, setCurrent] = useState(0)
+  const currentQ = mcqs[Math.min(current, mcqs.length - 1)]
 
   const score = useMemo(() => {
     if (!submitted) return null
@@ -84,9 +86,7 @@ export function McqTest({ user, subject, mcqs, onDone }) {
       <button className="link" onClick={onDone}>
         ← Back to subjects
       </button>
-      <h2>
-        {subject.code} — MCQ Test ({mcqs.length} questions)
-      </h2>
+      {!submitted && (
       <div className="exam-bar">
         <div className="exam-meta">
           <span>
@@ -112,7 +112,7 @@ export function McqTest({ user, subject, mcqs, onDone }) {
                 key={q.id}
                 type="button"
                 className={cls}
-                onClick={() => scrollToQuestion(qi)}
+                onClick={() => setCurrent(qi)}
               >
                 {qi + 1}
               </button>
@@ -120,6 +120,7 @@ export function McqTest({ user, subject, mcqs, onDone }) {
           })}
         </div>
       </div>
+      )}
       {submitted && (
         <div className="result score-card">
           <div className="score-big">
@@ -129,57 +130,126 @@ export function McqTest({ user, subject, mcqs, onDone }) {
           <div className="muted">{savedMsg}</div>
         </div>
       )}
-      {mcqs.map((q, qi) => {
-        const mine = answers[q.id]
-        const correct = submitted && mine === q.correct_index
-        const wrong = submitted && mine !== undefined && mine !== q.correct_index
-        return (
-          <div
-            key={q.id}
-            id={`exam-q-${qi + 1}`}
-            className={`card exam-q ${correct ? 'ok' : ''} ${wrong ? 'bad' : ''}`}
-          >
-            <p>
-              <strong>
-                Q{qi + 1}. <Tex text={q.question} />
-              </strong>{' '}
-              <span className="muted">Lecture {q.lecture_no}</span>
-            </p>
-            {q.options.map((opt, oi) => (
-              <label key={oi} className="opt">
-                <input
-                  type="radio"
-                  name={q.id}
-                  checked={mine === oi}
-                  disabled={submitted}
-                  onChange={() => setAnswers((a) => ({ ...a, [q.id]: oi }))}
-                />
-                <span>
-                  {LETTERS[oi]}. <Tex text={opt} />
-                </span>
-              </label>
-            ))}
-            {submitted && (
-              <div className="review">
-                <div>
-                  Correct answer: {LETTERS[q.correct_index]}.{' '}
-                  <Tex text={q.options[q.correct_index]} />
-                </div>
-                {q.explanation && (
-                  <div className="muted">
-                    <Tex text={q.explanation} />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )
-      })}
       {!submitted && (
-        <button className="primary" onClick={submit}>
-          Submit test
-        </button>
+        <section className="card mcq-play" aria-label={`Question ${current + 1}`}>
+          <div className="mcq-between">
+            <span className="mcq-eyebrow">
+              Question {current + 1} of {mcqs.length}
+            </span>
+            <span className="mcq-pill">
+              {subject.code} · {subject.term}
+            </span>
+          </div>
+          <div className="mcq-progress">
+            <span style={{ width: `${((current + 1) / mcqs.length) * 100}%` }} />
+          </div>
+          <h3>
+            <Tex text={currentQ.question} />
+          </h3>
+          <p className="muted">Lecture {currentQ.lecture_no}</p>
+          <div className="mcq-options">
+            {currentQ.options.map((opt, oi) => {
+              const mine = answers[currentQ.id]
+              const answeredQ = mine !== undefined
+              let cls = 'mcq-option'
+              if (answeredQ && oi === currentQ.correct_index) cls += ' correct'
+              else if (answeredQ && oi === mine) cls += ' incorrect'
+              return (
+                <button
+                  key={oi}
+                  type="button"
+                  disabled={answeredQ}
+                  className={cls}
+                  onClick={() => setAnswers((a) => ({ ...a, [currentQ.id]: oi }))}
+                >
+                  <span className="mcq-letter">{LETTERS[oi]}</span>
+                  <span className="mcq-opt-text">
+                    <Tex text={opt} />
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          {answers[currentQ.id] !== undefined && (
+            <p
+              className={`mcq-feedback ${
+                answers[currentQ.id] === currentQ.correct_index ? 'is-right' : 'is-wrong'
+              }`}
+              role="status"
+            >
+              {answers[currentQ.id] === currentQ.correct_index ? (
+                '✓ Correct!'
+              ) : (
+                <>
+                  ✗ Incorrect. Correct answer: {LETTERS[currentQ.correct_index]} —{' '}
+                  <Tex text={currentQ.options[currentQ.correct_index]} />.
+                </>
+              )}
+            </p>
+          )}
+          {answers[currentQ.id] !== undefined && currentQ.explanation && (
+            <div className="mcq-explain">
+              <Tex text={currentQ.explanation} />
+            </div>
+          )}
+          <div className="mcq-actions">
+            <button
+              type="button"
+              onClick={() => setCurrent((c) => Math.max(0, c - 1))}
+              disabled={current === 0}
+            >
+              ← Previous
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setCurrent((c) => Math.min(mcqs.length - 1, c + 1))}
+              disabled={current === mcqs.length - 1}
+            >
+              Next →
+            </button>
+          </div>
+          <button type="button" className="mcq-finish" onClick={submit}>
+            Finish now · see my score
+          </button>
+        </section>
       )}
+      {submitted &&
+        mcqs.map((q, qi) => {
+          const mine = answers[q.id]
+          return (
+            <div key={q.id} className="card mcq-review">
+              <p>
+                <strong>
+                  Q{qi + 1}. <Tex text={q.question} />
+                </strong>{' '}
+                <span className="muted">Lecture {q.lecture_no}</span>
+              </p>
+              {q.options.map((opt, oi) => {
+                let cls = 'mcq-review-opt'
+                if (oi === q.correct_index) cls += ' correct'
+                else if (oi === mine) cls += ' incorrect'
+                return (
+                  <div key={oi} className={cls}>
+                    <span className="mcq-letter">{LETTERS[oi]}</span>
+                    <span>
+                      <Tex text={opt} />
+                    </span>
+                    {oi === q.correct_index && <span className="muted"> — correct</span>}
+                    {oi === mine && oi !== q.correct_index && (
+                      <span className="muted"> — your answer</span>
+                    )}
+                  </div>
+                )
+              })}
+              {q.explanation && (
+                <div className="muted">
+                  <Tex text={q.explanation} />
+                </div>
+              )}
+            </div>
+          )
+        })}
       {submitted && <button onClick={onDone}>Back to subjects</button>}
     </div>
   )

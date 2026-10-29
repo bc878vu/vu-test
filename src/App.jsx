@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase, isAdmin } from './supabaseClient'
+import { supabase, fetchIsAdmin } from './supabaseClient'
 import { loadContent, upsertProfile, fetchMyAttempts, readAccessCode } from './data.js'
 import { McqTest, SubjTest } from './Tests.jsx'
 import Admin from './Admin.jsx'
@@ -14,6 +14,7 @@ export default function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [accessCode, setAccessCode] = useState('')
+  const [admin, setAdmin] = useState(false)
 
   const refresh = useCallback(async () => {
     const c = await loadContent()
@@ -106,7 +107,19 @@ export default function App() {
     )
   }
 
-  const admin = isAdmin(user)
+  useEffect(() => {
+    if (!user) {
+      setAdmin(false)
+      return
+    }
+    let live = true
+    fetchIsAdmin(user).then((v) => {
+      if (live) setAdmin(v)
+    })
+    return () => {
+      live = false
+    }
+  }, [user])
 
   return (
     <div className="shell">
