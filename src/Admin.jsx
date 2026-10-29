@@ -12,15 +12,76 @@ function Field({ label, children }) {
   )
 }
 
-function JsonFileInput({ onText, label }) {
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024
+const MAX_IMPORT_ROWS = 500
+const MAX_TEXT_LENGTH = 20000
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function validText(value, max = MAX_TEXT_LENGTH) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= max
+}
+
+function validLectureNo(value) {
+  if (value === null || value === undefined || value === '') return true
+  const number = Number(value)
+  return Number.isInteger(number) && number >= 1 && number <= 1000
+}
+
+function validMcqItem(item) {
+  return (
+    isRecord(item) &&
+    validText(item.question) &&
+    Array.isArray(item.options) &&
+    item.options.length === 4 &&
+    item.options.every((option) => validText(option, 5000)) &&
+    Number.isInteger(item.correct_index) &&
+    item.correct_index >= 0 &&
+    item.correct_index <= 3 &&
+    validLectureNo(item.lecture_no) &&
+    (item.explanation === undefined ||
+      item.explanation === null ||
+      (typeof item.explanation === 'string' && item.explanation.length <= MAX_TEXT_LENGTH))
+  )
+}
+
+function validSubjectiveItem(item) {
+  return (
+    isRecord(item) &&
+    validText(item.question) &&
+    validText(item.answer) &&
+    validLectureNo(item.lecture_no) &&
+    (item.marks === undefined ||
+      item.marks === null ||
+      (Number.isInteger(item.marks) && item.marks >= 1 && item.marks <= 1000))
+  )
+}
+
+function JsonFileInput({ onText, label, setMsg }) {
   return (
     <Field label={label || 'Or upload a JSON file'}>
       <input
         type="file"
         accept=".json,application/json"
         onChange={async (e) => {
-          const f = e.target.files && e.target.files[0]
-          if (f) onText(await f.text())
+          const input = e.currentTarget
+          const file = input.files && input.files[0]
+          if (!file) return
+          if (file.size > MAX_IMPORT_BYTES) {
+            setMsg('JSON file is too large. Maximum file size is 5 MB.')
+            input.value = ''
+            return
+          }
+          try {
+            onText(await file.text())
+            setMsg(`Loaded ${file.name}. Review the JSON, then select Add all.`)
+          } catch {
+            setMsg('Could not read the selected JSON file.')
+          } finally {
+            input.value = ''
+          }
         }}
       />
     </Field>
@@ -193,28 +254,39 @@ function McqsTab({ content, refresh, setMsg }) {
   async function saveOne(e) {
     e.preventDefault()
     if (!subjectId) return setMsg('Pick a subject first.')
-    if (!form.question.trim() || form.options.some((o) => !o.trim())) {
-      setMsg('Question and all 4 options are required.')
+    const item = {
+      question: form.question,
+      options: form.options,
+      correct_index: Number(form.correct_index),
+      lecture_no: form.lecture_no,
+      explanation: form.explanation,
+    }
+    if (!validMcqItem(item)) {
+      setMsg('Enter a question, four non-empty options, a valid correct option, and a valid lecture number.')
       return
     }
-    const res = await supabase.from('tp_mcqs').insert({
+    const row = {
       subject_id: subjectId,
-      lecture_no: form.lecture_no ? parseInt(form.lecture_no, 10) : null,
+      lecture_no: form.lecture_no ? Number(form.lecture_no) : null,
       question: form.question.trim(),
-      options: form.options.map((o) => o.trim()),
-      correct_index: parseInt(form.correct_index, 10),
+      options: form.options.map((option) => option.trim()),
+      correct_index: Number(form.correct_index),
       explanation: form.explanation.trim(),
-    })
+    }
+    const res = form.id
+      ? await supabase.from('tp_mcqs').update(row).eq('id', form.id)
+      : await supabase.from('tp_mcqs').insert(row)
     if (res.error) setMsg('Error: ' + res.error.message)
     else {
-      setMsg('MCQ added.')
-      setForm({ lecture_no: '', question: '', options: ['', '', '', ''], correct_index: 0, explanation: '' })
+      setMsg(form.id ? 'MCQ updated.' : 'MCQ added.')
+      setForm({ id: null, lecture_no: '', question: '', options: ['', '', '', ''], correct_index: 0, explanation: '' })
       refresh()
     }
   }
 
   async function saveBulk() {
     if (!subjectId) return setMsg('Pick a subject first.')
+    if (bulk.length > MAX_IMPORT_BYTES) return setMsg('JSON content is too large. Maximum size is 5 MB.')
     let arr
     try {
       arr = JSON.parse(bulk)
@@ -224,25 +296,19 @@ function McqsTab({ content, refresh, setMsg }) {
     if (!Array.isArray(arr) || arr.length === 0) {
       return setMsg('Bulk JSON must be a non-empty array.')
     }
-    for (const item of arr) {
-      if (
-        !item.question ||
-        !Array.isArray(item.options) ||
-        item.options.length !== 4 ||
-        item.correct_index === undefined ||
-        item.correct_index < 0 ||
-        item.correct_index > 3
-      ) {
-        return setMsg('Each bulk item needs question, exactly 4 options, and correct_index 0–3.')
-      }
+    if (arr.length > MAX_IMPORT_ROWS) {
+      return setMsg(`Import is limited to ${MAX_IMPORT_ROWS} questions per batch.`)
+    }
+    if (!arr.every(validMcqItem)) {
+      return setMsg('Every MCQ needs a question, four non-empty options, numeric correct_index 0–3, and a valid optional lecture_no.')
     }
     const rows = arr.map((item) => ({
       subject_id: subjectId,
-      lecture_no: item.lecture_no || null,
-      question: item.question,
-      options: item.options,
+      lecture_no: item.lecture_no === '' || item.lecture_no == null ? null : Number(item.lecture_no),
+      question: item.question.trim(),
+      options: item.options.map((option) => option.trim()),
       correct_index: item.correct_index,
-      explanation: item.explanation || '',
+      explanation: typeof item.explanation === 'string' ? item.explanation.trim() : '',
     }))
     const res = await supabase.from('tp_mcqs').insert(rows)
     if (res.error) setMsg('Error: ' + res.error.message)
@@ -275,7 +341,7 @@ function McqsTab({ content, refresh, setMsg }) {
         </select>
       </Field>
       <form className="card" onSubmit={saveOne}>
-        <h3>Add one MCQ (LaTeX with $...$ works in every field)</h3>
+        <h3>{form.id ? 'Edit MCQ' : 'Add one MCQ'} (LaTeX with $...$ works in every field)</h3>
         <Field label="Lecture no.">
           <input value={form.lecture_no} onChange={(e) => set('lecture_no', e.target.value)} />
         </Field>
@@ -305,16 +371,24 @@ function McqsTab({ content, refresh, setMsg }) {
           <textarea rows={2} value={form.explanation} onChange={(e) => set('explanation', e.target.value)} />
         </Field>
         <button className="primary" type="submit">
-          Add MCQ
+          {form.id ? 'Save MCQ changes' : 'Add MCQ'}
         </button>
+        {form.id && (
+          <button
+            type="button"
+            onClick={() => setForm({ id: null, lecture_no: '', question: '', options: ['', '', '', ''], correct_index: 0, explanation: '' })}
+          >
+            Cancel edit
+          </button>
+        )}
       </form>
       <div className="card">
-        <h3>Bulk add (paste a JSON array)</h3>
+        <h3>Bulk add (paste a JSON array or upload a file)</h3>
         <p className="muted">
           Each item: {'{'}question, options (4 strings), correct_index (0–3),
           explanation, lecture_no{'}'}. LaTeX with $...$ is supported.
         </p>
-        <JsonFileInput onText={setBulk} label="Or upload a JSON file (fills the box below)" />
+        <JsonFileInput onText={setBulk} setMsg={setMsg} label="Or upload a JSON file (fills the box below)" />
         <textarea rows={6} value={bulk} onChange={(e) => setBulk(e.target.value)} />
         <button className="primary" onClick={saveBulk}>
           Add all
@@ -327,9 +401,23 @@ function McqsTab({ content, refresh, setMsg }) {
             <strong>Q{i + 1}.</strong> <Tex text={m.question} />{' '}
             <span className="muted">(Lecture {m.lecture_no})</span>
           </div>
-          <button onClick={() => remove(m.id)}>Delete</button>
+          <div>
+            <button
+              onClick={() => setForm({
+                id: m.id,
+                lecture_no: m.lecture_no || '',
+                question: m.question || '',
+                options: Array.isArray(m.options) ? m.options : ['', '', '', ''],
+                correct_index: m.correct_index ?? 0,
+                explanation: m.explanation || '',
+              })}
+            >
+              Edit
+            </button>{' '}
+            <button onClick={() => remove(m.id)}>Delete</button>
+          </div>
         </div>
-      ))}
+      ))
     </div>
   )
 }
@@ -348,14 +436,19 @@ function SubjectiveTab({ content, refresh, setMsg }) {
   async function save(e) {
     e.preventDefault()
     if (!subjectId) return setMsg('Pick a subject first.')
-    if (!form.question.trim() || !form.answer.trim()) {
-      setMsg('Question and model answer are required.')
+    if (!validText(form.question) || !validText(form.answer) || !validLectureNo(form.lecture_no)) {
+      setMsg('Enter a question, model answer, and valid optional lecture number.')
+      return
+    }
+    const marks = Number(form.marks)
+    if (!Number.isInteger(marks) || marks < 1 || marks > 1000) {
+      setMsg('Marks must be a positive whole number no greater than 1000.')
       return
     }
     const row = {
       subject_id: subjectId,
-      lecture_no: form.lecture_no ? parseInt(form.lecture_no, 10) : null,
-      marks: parseInt(form.marks, 10) || (kind === 'short' ? 3 : 5),
+      lecture_no: form.lecture_no ? Number(form.lecture_no) : null,
+      marks,
       question: form.question.trim(),
       answer: form.answer.trim(),
     }
@@ -372,6 +465,7 @@ function SubjectiveTab({ content, refresh, setMsg }) {
 
   async function saveBulk() {
     if (!subjectId) return setMsg('Pick a subject first.')
+    if (bulk.length > MAX_IMPORT_BYTES) return setMsg('JSON content is too large. Maximum size is 5 MB.')
     let arr
     try {
       arr = JSON.parse(bulk)
@@ -381,17 +475,18 @@ function SubjectiveTab({ content, refresh, setMsg }) {
     if (!Array.isArray(arr) || arr.length === 0) {
       return setMsg('Bulk JSON must be a non-empty array.')
     }
-    for (const item of arr) {
-      if (!item.question || !item.answer) {
-        return setMsg('Each bulk item needs question and answer.')
-      }
+    if (arr.length > MAX_IMPORT_ROWS) {
+      return setMsg(`Import is limited to ${MAX_IMPORT_ROWS} questions per batch.`)
+    }
+    if (!arr.every(validSubjectiveItem)) {
+      return setMsg('Every item needs a question, answer, valid optional lecture_no, and positive integer marks.')
     }
     const rows = arr.map((item) => ({
       subject_id: subjectId,
-      lecture_no: item.lecture_no || null,
-      marks: parseInt(item.marks, 10) || (kind === 'short' ? 3 : 5),
-      question: item.question,
-      answer: item.answer,
+      lecture_no: item.lecture_no === '' || item.lecture_no == null ? null : Number(item.lecture_no),
+      marks: item.marks ?? (kind === 'short' ? 3 : 5),
+      question: item.question.trim(),
+      answer: item.answer.trim(),
     }))
     const res = await supabase.from(table).insert(rows)
     if (res.error) setMsg('Error: ' + res.error.message)
@@ -471,7 +566,7 @@ function SubjectiveTab({ content, refresh, setMsg }) {
           Each item: {'{'}question, answer, marks (optional), lecture_no
           (optional){'}'}. LaTeX with $...$ is supported.
         </p>
-        <JsonFileInput onText={setBulk} label="Upload a JSON file (fills the box below)" />
+        <JsonFileInput onText={setBulk} setMsg={setMsg} label="Upload a JSON file (fills the box below)" />
         <textarea rows={6} value={bulk} onChange={(e) => setBulk(e.target.value)} />
         <button className="primary" onClick={saveBulk}>
           Add all
@@ -529,7 +624,8 @@ function AdminsTab({ setMsg }) {
   async function add(e) {
     e.preventDefault()
     const em = email.trim().toLowerCase()
-    if (!em || !em.includes('@')) return setMsg('Enter a valid email address.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return setMsg('Enter a valid email address.')
+    if (em === 'veducator4@gmail.com') return setMsg('The root admin already has access and cannot be added to this list.')
     const res = await supabase.from('tp_admins').insert({ email: em })
     if (res.error) setMsg('Error: ' + res.error.message)
     else {

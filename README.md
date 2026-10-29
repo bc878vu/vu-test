@@ -3,26 +3,31 @@
 A small separate website for VU midterm test papers (lectures 1–22 only).
 Students sign up with an access code from the admin, take MCQ and subjective
 tests, and track their progress. The admin adds subjects, MCQs, and short/long
-questions. Math renders with KaTeX in proper format.
+questions, edits individual questions, imports validated JSON batches, and
+manages additional admin roles. Math renders with KaTeX in proper format.
 
 ## Setup
 
-1. Run `supabase-tp.sql` (in `~/workspace/testpapers/`) once in the Supabase
-   SQL editor. It creates the `tp_*` tables, row-level security policies, and
-   seeds PHY101, MTH202 and STA301 midterm content (lectures 1–22 only).
-2. Copy `app/.env.example` to `app/.env` and fill in:
+1. Run the base `supabase-tp.sql` schema in the Supabase SQL editor first. That
+   existing file is maintained separately and is not included in this repository.
+   It creates the `tp_*` tables, base row-level security policies, and seed content.
+2. Run this repository's `supabase-tp-admins.sql` in the same SQL editor. It adds
+   the admin-role table and database policies so extra admins can manage content.
+3. Copy `.env.example` to `.env` and fill in:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-3. Install and build:
-   - `cd app && npm install && npm run build`
-4. Deploy the `app/` directory to Vercel (standard Vite build, no server code).
+4. From the repository root, install and build:
+   - `npm install && npm run build`
+5. Deploy the repository root to Vercel (standard Vite build, no server code).
 
 ## First use
 
 1. Log in with the admin account (`veducator4@gmail.com`).
 2. Open Admin → Settings and set the student access code.
-3. Share the site link + access code with students. Students sign up with the
-   code; without it signup is refused.
+3. Use Admin → Admins to add or remove extra admin roles after running the migration.
+4. Share the site link + access code with students. Note: the current signup
+   access-code check is client-side only; use a server-side/Edge Function gate if
+   the code must be enforced as a security boundary.
 
 ## Notes
 
