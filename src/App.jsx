@@ -127,13 +127,6 @@ export default function App() {
         </div>
       </header>
       <main>
-        {content.fromSeed && (
-          <div className="notice">
-            Showing built-in seed content (PHY101, MTH202, STA301 midterm, lectures
-            1–22). Admin edits and saved progress need the database: run{' '}
-            <code>supabase-tp.sql</code> in the Supabase SQL editor.
-          </div>
-        )}
         {!user && view.name !== 'auth' && (
           <div className="card welcome-card">
             <h2>Login required</h2>

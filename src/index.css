@@ -31,6 +31,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   line-height: 1.55;
+  overflow-x: clip;
 }
 
 a { color: var(--primary); }
@@ -40,6 +41,9 @@ a { color: var(--primary); }
 .shell { max-width: 1080px; margin: 0 auto; padding: 0 20px 48px; }
 
 .topbar {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(241, 245, 249, 0.96);
+  backdrop-filter: blur(8px);
   display: flex; flex-wrap: wrap; gap: 12px 20px;
   align-items: center; justify-content: space-between;
   padding: 18px 0 14px;
@@ -158,6 +162,9 @@ table.truth-table th { background: var(--primary-soft); }
 
 footer { margin-top: 28px; font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
 .katex { font-size: 1.02em; }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+.card p, .opt span { overflow-wrap: anywhere; }
+.opt span { min-width: 0; }
 
 /* ---------- responsive ---------- */
 
