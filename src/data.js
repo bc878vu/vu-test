@@ -92,3 +92,27 @@ export async function readAccessCode() {
   if (!data) return { code: '', error: null }
   return { code: data.value || '', error: null }
 }
+
+// Site settings (tp_settings key/value rows). Missing rows fall back to
+// these defaults, so the site works before the admin saves anything.
+export async function readSettings() {
+  const defaults = {
+    access_code: '',
+    site_title: 'VU Test Papers',
+    site_tagline: 'Midterm practice · Lectures 1–22',
+    signup_open: true,
+  }
+  if (!supabase) return defaults
+  const { data, error } = await supabase.from('tp_settings').select('key, value')
+  if (error || !data) return defaults
+  const m = {}
+  data.forEach((r) => {
+    m[r.key] = r.value
+  })
+  return {
+    access_code: m.access_code ?? '',
+    site_title: m.site_title || defaults.site_title,
+    site_tagline: m.site_tagline || defaults.site_tagline,
+    signup_open: m.signup_open !== 'false',
+  }
+}

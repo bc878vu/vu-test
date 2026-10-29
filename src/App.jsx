@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase, fetchIsAdmin } from './supabaseClient'
-import { loadContent, upsertProfile, fetchMyAttempts, readAccessCode } from './data.js'
+import { loadContent, upsertProfile, fetchMyAttempts, readAccessCode, readSettings } from './data.js'
 import { McqTest, SubjTest } from './Tests.jsx'
 import Admin from './Admin.jsx'
 
@@ -23,6 +23,12 @@ export default function App() {
     }
   })
   const [activeSubject, setActiveSubject] = useState(null)
+  const [settings, setSettings] = useState({
+    site_title: 'VU Test Papers',
+    site_tagline: 'Midterm practice · Lectures 1–22',
+    signup_open: true,
+  })
+  const [blocked, setBlocked] = useState(null)
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
@@ -66,6 +72,29 @@ export default function App() {
   }, [refresh])
 
   useEffect(() => {
+    readSettings().then(setSettings)
+  }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setBlocked(null)
+      return
+    }
+    let live = true
+    supabase
+      .from('tp_blocked')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (live && !error && data) setBlocked(data)
+      })
+    return () => {
+      live = false
+    }
+  }, [user])
+
+  useEffect(() => {
     if (!user) {
       setAdmin(false)
       return
@@ -84,6 +113,9 @@ export default function App() {
     setAuthMsg('')
     if (!supabase) return
     if (authMode === 'signup') {
+      if (!settings.signup_open) {
+        return setAuthMsg('Signups are currently closed by the admin.')
+      }
       const { code, error } = await readAccessCode()
       if (error) return setAuthMsg(error)
       if (!code) {
@@ -102,6 +134,7 @@ export default function App() {
     }
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) setAuthMsg(error.message)
+    else setView({ name: 'subjects' })
   }
 
   async function logout() {
@@ -151,8 +184,8 @@ export default function App() {
           <div className="brand">
             <div className="brand-logo">VU</div>
             <div>
-              <h1>VU Test Papers</h1>
-              <p className="tagline">Midterm practice · Lectures 1–22</p>
+              <h1>{settings.site_title}</h1>
+              <p className="tagline">{settings.site_tagline}</p>
             </div>
           </div>
           <div className="header-actions">
@@ -224,6 +257,19 @@ export default function App() {
         </nav>
       </header>
       <main>
+        {blocked ? (
+          <div className="card blocked-card">
+            <h2>Account blocked</h2>
+            <p>
+              The admin has blocked this account.
+              {blocked.reason ? ` Reason: ${blocked.reason}` : ''}
+            </p>
+            <p className="muted">
+              Contact the admin to restore access. You can still log out from the header.
+            </p>
+          </div>
+        ) : (
+          <>
         {!user && view.name !== 'auth' && (
           <div className="card welcome-card">
             <h2>Login required</h2>
@@ -322,12 +368,9 @@ export default function App() {
         {user && view.name === 'admin' && !admin && (
           <p className="card">Only the admin account can open this page.</p>
         )}
+          </>
+        )}
       </main>
-      <footer className="muted">
-        Midterm practice, lectures 1–22 only. “Most important / repeated” means the
-        questions are present in past-paper banks and core to the handout; no
-        per-question past-paper frequency is claimed.
-      </footer>
       <nav className="bottom-nav">
         <button
           className={view.name === 'subjects' ? 'active' : ''}

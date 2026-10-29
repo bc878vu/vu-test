@@ -123,22 +123,13 @@ button:disabled { opacity: 0.6; cursor: default; }
 
 .auth-card { max-width: 480px; margin: 20px auto; }
 .welcome-card {
-  max-width: 640px; margin: 20px auto; text-align: center;
-  border-radius: 24px; padding: 32px;
-  background: linear-gradient(90deg, #4f46e5, #7c3aed 55%, #9333ea);
-  color: #fff; border: none; overflow: hidden; position: relative;
-  box-shadow: 0 20px 40px rgba(79, 70, 229, 0.3);
+  max-width: 640px; margin: 32px auto; text-align: center;
+  border-radius: 20px; padding: 36px 28px;
+  background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
-.welcome-card::after {
-  content: ''; position: absolute; right: -40px; bottom: -40px;
-  width: 220px; height: 220px; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12); filter: blur(30px); pointer-events: none;
-}
-.welcome-card h2, .welcome-card p { color: #fff; position: relative; z-index: 1; }
-.welcome-card p { color: #e0e7ff; }
-.welcome-card .actions { justify-content: center; position: relative; z-index: 1; }
-.welcome-card .primary { background: #fff; border-color: #fff; color: #4338ca; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2); }
-.welcome-card .primary:hover { background: #eef2ff; border-color: #eef2ff; }
+.welcome-card h2 { margin-top: 0; }
+.welcome-card .actions { justify-content: center; }
 
 .subjects-grid {
   display: grid; gap: 16px;
@@ -613,3 +604,9 @@ html.dark .review-answer { background: #1e293b; }
   .attempt-row-actions { justify-content: flex-start; }
   .transcript-score-block { text-align: left; }
 }
+
+/* ---------- users tab + blocked account ---------- */
+
+.users-search { width: 100%; margin-bottom: 14px; }
+.blocked-badge { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.blocked-card { max-width: 640px; margin: 32px auto; text-align: center; border-color: #fecaca; }

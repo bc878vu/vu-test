@@ -124,7 +124,7 @@ export default function Admin({ onReload }) {
     <div>
       <h2>Admin panel</h2>
       <div className="tabs">
-        {['subjects', 'mcqs', 'subjective', 'progress', 'settings', 'admins'].map((t) => (
+        {['subjects', 'mcqs', 'subjective', 'progress', 'users', 'settings', 'admins'].map((t) => (
           <button
             key={t}
             className={tab === t ? 'primary' : ''}
@@ -148,6 +148,7 @@ export default function Admin({ onReload }) {
         <SubjectiveTab content={content} refresh={refresh} setMsg={setMsg} />
       )}
       {tab === 'progress' && <ProgressTab setMsg={setMsg} />}
+      {tab === 'users' && <UsersTab setMsg={setMsg} />}
       {tab === 'settings' && <SettingsTab setMsg={setMsg} />}
       {tab === 'admins' && <AdminsTab setMsg={setMsg} />}
     </div>
@@ -1010,20 +1011,229 @@ function ProgressTab({ setMsg }) {
   )
 }
 
+function UsersTab({ setMsg }) {
+  const [profiles, setProfiles] = useState(null)
+  const [attempts, setAttempts] = useState(null)
+  const [admins, setAdmins] = useState([])
+  const [blocked, setBlocked] = useState([])
+  const [blockedMissing, setBlockedMissing] = useState(false)
+  const [adminsMissing, setAdminsMissing] = useState(false)
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState(null)
+  const [reason, setReason] = useState('')
+
+  async function load() {
+    const [p, a, ad, bl] = await Promise.all([
+      supabase.from('tp_profiles').select('id, email').order('email'),
+      supabase.from('tp_attempts').select('*').order('created_at', { ascending: false }),
+      supabase.from('tp_admins').select('email'),
+      supabase.from('tp_blocked').select('*'),
+    ])
+    if (!p.error) setProfiles(p.data || [])
+    if (!a.error) setAttempts(a.data || [])
+    if (ad.error) setAdminsMissing(true)
+    else setAdmins(ad.data || [])
+    if (bl.error) setBlockedMissing(true)
+    else setBlocked(bl.data || [])
+    if (p.error || a.error) {
+      setMsg(`Could not load users: ${p.error?.message || a.error?.message}`)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const isBlocked = (uid) => blocked.some((b) => b.user_id === uid)
+  const isAdmin = (email) =>
+    email === 'veducator4@gmail.com' || admins.some((x) => x.email === email)
+
+  async function toggleBlock(uid, email) {
+    if (blockedMissing) {
+      setMsg('Block table is missing. Run supabase-tp-users.sql in the Supabase SQL editor first.')
+      return
+    }
+    const { data } = await supabase.auth.getUser()
+    let res
+    if (isBlocked(uid)) {
+      res = await supabase.from('tp_blocked').delete().eq('user_id', uid)
+    } else {
+      res = await supabase.from('tp_blocked').insert({
+        user_id: uid,
+        reason: reason.trim(),
+        blocked_by: data?.user?.email || '',
+      })
+    }
+    if (res.error) setMsg('Error: ' + res.error.message)
+    else {
+      setMsg(isBlocked(uid) ? `Unblocked ${email}.` : `Blocked ${email}.`)
+      load()
+    }
+  }
+
+  async function toggleAdmin(email) {
+    if (adminsMissing) {
+      setMsg('Admins table is missing. Run supabase-tp-admins.sql in the Supabase SQL editor first.')
+      return
+    }
+    const { data } = await supabase.auth.getUser()
+    let res
+    if (isAdmin(email)) {
+      res = await supabase.from('tp_admins').delete().eq('email', email)
+    } else {
+      res = await supabase
+        .from('tp_admins')
+        .insert({ email, created_by: data?.user?.email || '' })
+    }
+    if (res.error) setMsg('Error: ' + res.error.message)
+    else {
+      setMsg(isAdmin(email) ? `Removed admin: ${email}.` : `Made admin: ${email}.`)
+      load()
+    }
+  }
+
+  if (profiles === null || attempts === null) return <p>Loading users…</p>
+
+  const byUser = {}
+  attempts.forEach((a) => {
+    if (!byUser[a.user_id]) byUser[a.user_id] = []
+    byUser[a.user_id].push(a)
+  })
+  const users = [
+    ...profiles.map((p) => ({ id: p.id, email: p.email })),
+    ...Object.keys(byUser)
+      .filter((uid) => !profiles.some((p) => p.id === uid))
+      .map((uid) => ({ id: uid, email: `User ${String(uid).slice(0, 8)}…` })),
+  ].filter((u) => u.email.toLowerCase().includes(query.trim().toLowerCase()))
+
+  return (
+    <div>
+      <input
+        className="users-search"
+        placeholder="Search users by email…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {blockedMissing && (
+        <p className="muted">
+          Block/unblock needs supabase-tp-users.sql (run it once in the Supabase SQL editor).
+        </p>
+      )}
+      {users.length === 0 && <p className="card">No users found.</p>}
+      {users.map((u) => {
+        const list = byUser[u.id] || []
+        const reviewed = list.filter((a) => a.status === 'reviewed').length
+        const best =
+          list.length > 0
+            ? Math.max(...list.map((a) => (a.total > 0 ? Math.round((a.score / a.total) * 100) : 0)))
+            : null
+        const last = list.length > 0 ? new Date(list[0].created_at).toLocaleString() : null
+        return (
+          <div key={u.id} className="card">
+            <div className="mcq-between">
+              <div>
+                <strong>{u.email}</strong>{' '}
+                <span className={`status-badge ${isAdmin(u.email) ? 'reviewed' : 'pending'}`}>
+                  {isAdmin(u.email) ? 'ADMIN' : 'STUDENT'}
+                </span>{' '}
+                {isBlocked(u.id) && <span className="status-badge blocked-badge">BLOCKED</span>}
+              </div>
+              <span className="muted">
+                {list.length} attempt{list.length !== 1 ? 's' : ''} · {reviewed} reviewed
+                {best !== null && <> · best {best}%</>}
+              </span>
+            </div>
+            <p className="muted">
+              {last ? `Last active: ${last}` : 'No attempts yet.'}
+            </p>
+            <div className="actions">
+              <button onClick={() => setExpanded(expanded === u.id ? null : u.id)}>
+                {expanded === u.id ? 'Hide attempts' : 'View attempts'}
+              </button>
+              {!blockedMissing && (
+                <button onClick={() => toggleBlock(u.id, u.email)}>
+                  {isBlocked(u.id) ? 'Unblock' : 'Block'}
+                </button>
+              )}
+              {u.email !== 'veducator4@gmail.com' && !adminsMissing && (
+                <button onClick={() => toggleAdmin(u.email)}>
+                  {isAdmin(u.email) ? 'Remove admin' : 'Make admin'}
+                </button>
+              )}
+            </div>
+            {!isBlocked(u.id) && !blockedMissing && (
+              <Field label="Block reason (optional, shown to the student)">
+                <input
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Misuse of the platform"
+                />
+              </Field>
+            )}
+            {expanded === u.id && (
+              <div>
+                {list.length === 0 ? (
+                  <p className="muted">No attempts yet.</p>
+                ) : (
+                  list.map((a) => (
+                    <div key={a.id} className="attempt-row">
+                      <div>
+                        <strong>
+                          {a.subject_code} — {a.type === 'mcq' ? 'MCQ' : 'Subjective'}
+                        </strong>
+                        <div className="muted">
+                          {new Date(a.created_at).toLocaleString()} · Score: {a.score} / {a.total}
+                          {a.status === 'reviewed' && a.admin_score != null && (
+                            <> · Teacher: {a.admin_score} / {a.total}</>
+                          )}
+                        </div>
+                      </div>
+                      <span
+                        className={`status-badge ${a.status === 'reviewed' ? 'reviewed' : 'pending'}`}
+                      >
+                        {a.status === 'reviewed' ? 'Reviewed' : 'Pending review'}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+      <p className="muted">
+        Deleting a login account is not possible from here (it needs the Supabase
+        dashboard). Blocking stops that account from opening any test.
+      </p>
+    </div>
+  )
+}
+
 function SettingsTab({ setMsg }) {
   const [code, setCode] = useState('')
   const [current, setCurrent] = useState(null)
+  const [title, setTitle] = useState('')
+  const [tagline, setTagline] = useState('')
+  const [signupOpen, setSignupOpen] = useState(true)
 
   useEffect(() => {
     supabase
       .from('tp_settings')
-      .select('value')
-      .eq('key', 'access_code')
-      .maybeSingle()
-      .then(({ data }) => setCurrent(data ? data.value : ''))
+      .select('key, value')
+      .then(({ data }) => {
+        const m = {}
+        ;(data || []).forEach((r) => {
+          m[r.key] = r.value
+        })
+        setCurrent(m.access_code ?? '')
+        setTitle(m.site_title ?? '')
+        setTagline(m.site_tagline ?? '')
+        setSignupOpen(m.signup_open !== 'false')
+      })
   }, [])
 
-  async function save(e) {
+  async function saveCode(e) {
     e.preventDefault()
     const res = await supabase
       .from('tp_settings')
@@ -1036,22 +1246,71 @@ function SettingsTab({ setMsg }) {
     }
   }
 
+  async function saveSite(e) {
+    e.preventDefault()
+    const res = await supabase.from('tp_settings').upsert(
+      [
+        { key: 'site_title', value: title.trim() },
+        { key: 'site_tagline', value: tagline.trim() },
+        { key: 'signup_open', value: signupOpen ? 'true' : 'false' },
+      ],
+      { onConflict: 'key' },
+    )
+    if (res.error) setMsg('Error: ' + res.error.message)
+    else setMsg('Site settings saved. Reload the page to see the new title.')
+  }
+
   return (
-    <form className="card" onSubmit={save}>
-      <h3>Student access code</h3>
-      <p className="muted">
-        Current code: <strong>{current === '' ? '(not set yet)' : current}</strong>
-      </p>
-      <p className="muted">
-        Students must enter this code at signup. Without it, signup is refused.
-        Change it any time; existing students stay signed in.
-      </p>
-      <Field label="New access code">
-        <input value={code} onChange={(e) => setCode(e.target.value)} />
-      </Field>
-      <button className="primary" type="submit">
-        Save access code
-      </button>
-    </form>
+    <div>
+      <form className="card" onSubmit={saveCode}>
+        <h3>Student access code</h3>
+        <p className="muted">
+          Current code: <strong>{current === '' ? '(not set yet)' : current}</strong>
+        </p>
+        <p className="muted">
+          Students must enter this code at signup. Without it, signup is refused.
+          Change it any time; existing students stay signed in.
+        </p>
+        <Field label="New access code">
+          <input value={code} onChange={(e) => setCode(e.target.value)} />
+        </Field>
+        <button className="primary" type="submit">
+          Save access code
+        </button>
+      </form>
+      <form className="card" onSubmit={saveSite}>
+        <h3>Site settings</h3>
+        <Field label="Site title (shown in the header)">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="VU Test Papers"
+          />
+        </Field>
+        <Field label="Tagline (shown under the title)">
+          <input
+            value={tagline}
+            onChange={(e) => setTagline(e.target.value)}
+            placeholder="Midterm practice · Lectures 1–22"
+          />
+        </Field>
+        <Field label="New signups">
+          <label>
+            <input
+              type="checkbox"
+              checked={signupOpen}
+              onChange={(e) => setSignupOpen(e.target.checked)}
+            />{' '}
+            Allow new students to sign up
+          </label>
+        </Field>
+        <button className="primary" type="submit">
+          Save site settings
+        </button>
+        <p className="muted">
+          Turning signups off blocks new accounts only; existing students keep working.
+        </p>
+      </form>
+    </div>
   )
 }
