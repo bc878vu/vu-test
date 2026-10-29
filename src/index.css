@@ -580,3 +580,36 @@ html.dark .ql-picker { color: #cbd5e1; }
   .user-email { display: none; }
   .transcript-row { align-items: flex-start; flex-direction: column; }
 }
+
+/* ---------- teacher review (admin progress) ---------- */
+
+.ok-text { color: var(--ok); font-weight: 700; }
+.bad-text { color: var(--bad); font-weight: 700; }
+.status-badge {
+  font-size: 11px; font-weight: 800; border-radius: 999px; padding: 4px 10px;
+  white-space: nowrap;
+}
+.status-badge.reviewed { background: var(--ok-soft); border: 1px solid var(--ok-line); color: var(--ok); }
+.status-badge.pending { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; }
+.attempt-row {
+  display: flex; justify-content: space-between; gap: 12px; align-items: center;
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 10px;
+}
+.attempt-row-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.review-panel { border-color: var(--primary-line); }
+.review-q { border-top: 1px solid var(--line); padding: 14px 0; }
+.review-q:first-of-type { border-top: none; }
+.review-answer {
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  background: #f8fafc; margin: 10px 0; line-height: 1.6; overflow-wrap: anywhere;
+}
+html.dark .review-answer { background: #1e293b; }
+.admin-marks input { width: 90px; display: inline-block; }
+.transcript-score-block { text-align: right; }
+.transcript-teacher { font-size: 13px; font-weight: 700; color: var(--ok); margin-top: 2px; }
+
+@media (max-width: 640px) {
+  .attempt-row { flex-direction: column; align-items: flex-start; }
+  .attempt-row-actions { justify-content: flex-start; }
+  .transcript-score-block { text-align: left; }
+}

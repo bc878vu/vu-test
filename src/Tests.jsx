@@ -401,6 +401,10 @@ export function SubjTest({ user, subject, shorts, longs, onDone }) {
             {counts.right} right · {counts.partial} partial · {counts.wrong} wrong
           </div>
           <div>out of {all.length} questions</div>
+          <div className="muted">
+            Submitted to admin for review — teacher marks will appear in Result
+            &amp; Stats.
+          </div>
           <div className="muted">{savedMsg}</div>
         </div>
       )}

@@ -555,10 +555,22 @@ function Progress({ user, content }) {
                 </strong>
                 <div className="muted">{new Date(a.created_at).toLocaleString()}</div>
               </div>
-              <strong className="transcript-score">
-                {a.score} / {a.total}
-                {a.total > 0 ? ` (${Math.round((a.score / a.total) * 100)}%)` : ''}
-              </strong>
+              <div className="transcript-score-block">
+                <strong className="transcript-score">
+                  {a.score} / {a.total}
+                  {a.total > 0 ? ` (${Math.round((a.score / a.total) * 100)}%)` : ''}
+                </strong>
+                {a.status === 'reviewed' ? (
+                  <div className="transcript-teacher">
+                    Teacher: {a.admin_score ?? a.score} / {a.total}
+                    {a.review?.feedback ? ` — ${a.review.feedback}` : ''}
+                  </div>
+                ) : a.type === 'mcq' ? (
+                  <div className="muted">Auto-graded</div>
+                ) : (
+                  <div className="muted">Submitted to admin · pending review</div>
+                )}
+              </div>
             </div>
           ))}
         </div>

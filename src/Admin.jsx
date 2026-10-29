@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import DOMPurify from 'dompurify'
 import { supabase } from './supabaseClient'
 import { loadContent } from './data.js'
 import { Tex } from './Tex.jsx'
@@ -123,7 +124,7 @@ export default function Admin({ onReload }) {
     <div>
       <h2>Admin panel</h2>
       <div className="tabs">
-        {['subjects', 'mcqs', 'subjective', 'settings', 'admins'].map((t) => (
+        {['subjects', 'mcqs', 'subjective', 'progress', 'settings', 'admins'].map((t) => (
           <button
             key={t}
             className={tab === t ? 'primary' : ''}
@@ -146,6 +147,7 @@ export default function Admin({ onReload }) {
       {tab === 'subjective' && (
         <SubjectiveTab content={content} refresh={refresh} setMsg={setMsg} />
       )}
+      {tab === 'progress' && <ProgressTab setMsg={setMsg} />}
       {tab === 'settings' && <SettingsTab setMsg={setMsg} />}
       {tab === 'admins' && <AdminsTab setMsg={setMsg} />}
     </div>
@@ -694,6 +696,316 @@ function AdminsTab({ setMsg }) {
           </div>
         ))
       )}
+    </div>
+  )
+}
+
+function ProgressTab({ setMsg }) {
+  const [profiles, setProfiles] = useState(null)
+  const [attempts, setAttempts] = useState(null)
+  const [open, setOpen] = useState(null)
+  const [questions, setQuestions] = useState(null)
+  const [adminMarks, setAdminMarks] = useState({})
+  const [feedback, setFeedback] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function load() {
+    const [p, a] = await Promise.all([
+      supabase.from('tp_profiles').select('id, email').order('email'),
+      supabase.from('tp_attempts').select('*').order('created_at', { ascending: false }),
+    ])
+    if (!p.error) setProfiles(p.data || [])
+    if (!a.error) setAttempts(a.data || [])
+    if (p.error || a.error) {
+      setMsg(`Could not load progress: ${p.error?.message || a.error?.message}`)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const emailOf = (uid) =>
+    (profiles || []).find((p) => p.id === uid)?.email ||
+    `User ${String(uid).slice(0, 8)}…`
+
+  async function openReview(attempt) {
+    setOpen(attempt)
+    setQuestions(null)
+    setAdminMarks((attempt.review && attempt.review.marks) || {})
+    setFeedback((attempt.review && attempt.review.feedback) || '')
+    if (attempt.type === 'mcq') {
+      const res = await supabase
+        .from('tp_mcqs')
+        .select('*')
+        .eq('subject_id', attempt.subject_id)
+        .order('lecture_no')
+      setQuestions(res.error ? [] : res.data || [])
+    } else {
+      const [s, l] = await Promise.all([
+        supabase.from('tp_short_questions').select('*').eq('subject_id', attempt.subject_id),
+        supabase.from('tp_long_questions').select('*').eq('subject_id', attempt.subject_id),
+      ])
+      setQuestions([
+        ...(s.data || []).map((q) => ({ ...q, kind: 'Short' })),
+        ...(l.data || []).map((q) => ({ ...q, kind: 'Long' })),
+      ])
+    }
+  }
+
+  async function saveReviewPatch(patch) {
+    const { data } = await supabase.auth.getUser()
+    const res = await supabase
+      .from('tp_attempts')
+      .update({
+        ...patch,
+        review: {
+          ...(open.review || {}),
+          ...(patch.review || {}),
+          reviewer: data?.user?.email || '',
+          reviewed_at: new Date().toISOString(),
+        },
+      })
+      .eq('id', open.id)
+    if (res.error) {
+      if (/column/i.test(res.error.message)) {
+        setMsg(
+          'Review columns are missing. Run supabase-tp-review.sql in the Supabase SQL editor first, then try again.',
+        )
+      } else {
+        setMsg(`Error: ${res.error.message}`)
+      }
+      return false
+    }
+    return true
+  }
+
+  async function saveSubjectiveReview() {
+    if (!open || !questions) return
+    const marks = {}
+    let total = 0
+    for (const q of questions) {
+      const max = q.marks == null ? 100 : q.marks
+      const v = Number(adminMarks[q.id])
+      if (!Number.isInteger(v) || v < 0 || v > max) {
+        setMsg(`Marks for "${String(q.question).slice(0, 40)}…" must be a whole number from 0 to ${max}.`)
+        return
+      }
+      marks[q.id] = v
+      total += v
+    }
+    setSaving(true)
+    const ok = await saveReviewPatch({
+      status: 'reviewed',
+      admin_score: total,
+      review: { marks, feedback: feedback.trim() },
+    })
+    setSaving(false)
+    if (ok) {
+      setMsg('Review saved. The student will see your marks in Result & Stats.')
+      setOpen(null)
+      load()
+    }
+  }
+
+  async function acknowledgeMcq() {
+    setSaving(true)
+    const ok = await saveReviewPatch({
+      status: 'reviewed',
+      admin_score: open.score,
+      review: { feedback: feedback.trim() },
+    })
+    setSaving(false)
+    if (ok) {
+      setMsg('MCQ attempt marked as reviewed.')
+      setOpen(null)
+      load()
+    }
+  }
+
+  if (profiles === null || attempts === null) return <p>Loading progress…</p>
+
+  const byUser = {}
+  attempts.forEach((a) => {
+    if (!byUser[a.user_id]) byUser[a.user_id] = []
+    byUser[a.user_id].push(a)
+  })
+  const userIds = [
+    ...profiles.map((p) => p.id),
+    ...Object.keys(byUser).filter((uid) => !profiles.some((p) => p.id === uid)),
+  ]
+
+  return (
+    <div>
+      {open && (
+        <div className="card review-panel">
+          <div className="mcq-between">
+            <h3>
+              Review: {emailOf(open.user_id)} — {open.subject_code} (
+              {open.type === 'mcq' ? 'MCQ' : 'Subjective'})
+            </h3>
+            <button onClick={() => setOpen(null)}>Close</button>
+          </div>
+          <p className="muted">
+            Submitted {new Date(open.created_at).toLocaleString()} · Student
+            score: {open.score} / {open.total} · Status: {open.status || 'submitted'}
+          </p>
+          {questions === null && <p>Loading questions…</p>}
+          {open.type === 'mcq' && questions && questions.length === 0 && (
+            <p className="muted">
+              Question details are unavailable (the subject may have changed).
+              Auto score: {open.score} / {open.total}.
+              {open.details && Array.isArray(open.details.wrong_lectures) && open.details.wrong_lectures.length > 0 && (
+                <> Wrong lectures: {open.details.wrong_lectures.join(', ')}.</>
+              )}
+            </p>
+          )}
+          {open.type === 'mcq' &&
+            questions &&
+            questions.map((q) => {
+              const mine = open.details?.answers?.[q.id]
+              const right = mine === q.correct_index
+              return (
+                <div key={q.id} className="review-q">
+                  <p>
+                    <Tex text={q.question} />{' '}
+                    <span className="muted">(Lecture {q.lecture_no})</span>
+                  </p>
+                  <p>
+                    Student answer:{' '}
+                    <strong>
+                      {mine === undefined
+                        ? 'not answered'
+                        : `${'ABCD'[mine]}. `}
+                      {mine !== undefined && <Tex text={q.options[mine]} />}
+                    </strong>{' '}
+                    <span className={right ? 'ok-text' : 'bad-text'}>
+                      {mine === undefined ? '' : right ? '✓ correct' : '✗ wrong'}
+                    </span>
+                  </p>
+                  {!right && (
+                    <p className="muted">
+                      Correct answer: {'ABCD'[q.correct_index]}.{' '}
+                      <Tex text={q.options[q.correct_index]} />
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          {open.type !== 'mcq' &&
+            questions &&
+            questions.map((q) => {
+              const written = open.details?.written?.[q.id] || ''
+              const plain = String(written)
+                .replace(/<[^>]*>/g, '')
+                .replace(/&nbsp;/g, ' ')
+                .trim()
+              return (
+                <div key={q.id} className="review-q">
+                  <p>
+                    <strong>
+                      {q.kind} ({q.marks} marks). <Tex text={q.question} />
+                    </strong>
+                  </p>
+                  <div className="review-answer">
+                    {plain ? (
+                      <div
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(written) }}
+                      />
+                    ) : (
+                      <span className="muted">(no answer written)</span>
+                    )}
+                  </div>
+                  <p className="muted">
+                    Model answer: <Tex text={q.answer} />
+                  </p>
+                  <p>
+                    Self-mark: <strong>{open.details?.marks?.[q.id] || 'not marked'}</strong>
+                    {' · '}
+                    <label className="admin-marks">
+                      Teacher marks (0–{q.marks == null ? 100 : q.marks}):{' '}
+                      <input
+                        type="number"
+                        min={0}
+                        max={q.marks == null ? 100 : q.marks}
+                        value={adminMarks[q.id] ?? ''}
+                        onChange={(e) =>
+                          setAdminMarks((m) => ({ ...m, [q.id]: e.target.value }))
+                        }
+                      />
+                    </label>
+                  </p>
+                </div>
+              )
+            })}
+          <Field label="Feedback for the student (optional)">
+            <textarea
+              rows={3}
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+            />
+          </Field>
+          {open.type === 'mcq' ? (
+            <button className="primary" disabled={saving} onClick={acknowledgeMcq}>
+              {saving ? 'Saving…' : 'Mark MCQ attempt as reviewed'}
+            </button>
+          ) : (
+            <button className="primary" disabled={saving} onClick={saveSubjectiveReview}>
+              {saving ? 'Saving…' : 'Save teacher marks'}
+            </button>
+          )}
+          <p className="muted">
+            MCQ results are auto-graded and visible here instantly. Subjective
+            marks you save here appear in the student&apos;s Result &amp; Stats.
+          </p>
+        </div>
+      )}
+      <h3>Student progress (per user)</h3>
+      {userIds.length === 0 && <p className="card">No users yet.</p>}
+      {userIds.map((uid) => {
+        const list = byUser[uid] || []
+        const reviewed = list.filter((a) => a.status === 'reviewed').length
+        return (
+          <div key={uid} className="card">
+            <div className="mcq-between">
+              <h3>{emailOf(uid)}</h3>
+              <span className="muted">
+                {list.length} attempt{list.length !== 1 ? 's' : ''} · {reviewed} reviewed
+              </span>
+            </div>
+            {list.length === 0 ? (
+              <p className="muted">No attempts yet.</p>
+            ) : (
+              list.map((a) => (
+                <div key={a.id} className="attempt-row">
+                  <div>
+                    <strong>
+                      {a.subject_code} — {a.type === 'mcq' ? 'MCQ' : 'Subjective'}
+                    </strong>
+                    <div className="muted">
+                      {new Date(a.created_at).toLocaleString()} · Score: {a.score} / {a.total}
+                      {a.status === 'reviewed' && a.admin_score != null && (
+                        <> · Teacher: {a.admin_score} / {a.total}</>
+                      )}
+                    </div>
+                  </div>
+                  <div className="attempt-row-actions">
+                    <span
+                      className={`status-badge ${a.status === 'reviewed' ? 'reviewed' : 'pending'}`}
+                    >
+                      {a.status === 'reviewed' ? 'Reviewed' : 'Pending review'}
+                    </span>
+                    <button onClick={() => openReview(a)}>
+                      {a.type === 'mcq' ? 'View result' : 'Review & mark'}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
