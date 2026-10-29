@@ -417,7 +417,7 @@ function McqsTab({ content, refresh, setMsg }) {
             <button onClick={() => remove(m.id)}>Delete</button>
           </div>
         </div>
-      ))
+      ))}
     </div>
   )
 }
