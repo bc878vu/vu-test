@@ -1,13 +1,38 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Tex, TruthTable } from './Tex.jsx'
 import { saveAttempt } from './data.js'
+import RichEditor from './RichEditor.jsx'
 
 const LETTERS = ['A', 'B', 'C', 'D']
+
+function fmtTime(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function useElapsed(running) {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!running) return undefined
+    const t = setInterval(() => setElapsed((e) => e + 1), 1000)
+    return () => clearInterval(t)
+  }, [running])
+  return elapsed
+}
+
+function scrollToQuestion(index) {
+  document
+    .getElementById(`exam-q-${index + 1}`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 export function McqTest({ user, subject, mcqs, onDone }) {
   const [answers, setAnswers] = useState({})
   const [submitted, setSubmitted] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
+  const elapsed = useElapsed(!submitted)
+  const answered = Object.keys(answers).length
 
   const score = useMemo(() => {
     if (!submitted) return null
@@ -62,10 +87,45 @@ export function McqTest({ user, subject, mcqs, onDone }) {
       <h2>
         {subject.code} — MCQ Test ({mcqs.length} questions)
       </h2>
+      <div className="exam-bar">
+        <div className="exam-meta">
+          <span>
+            {answered} / {mcqs.length} answered
+          </span>
+          <span className="exam-timer">⏱ {fmtTime(elapsed)}</span>
+        </div>
+        <div className="exam-progress">
+          <div
+            className="exam-progress-fill"
+            style={{ width: `${mcqs.length ? Math.round((answered / mcqs.length) * 100) : 0}%` }}
+          />
+        </div>
+        <div className="palette">
+          {mcqs.map((q, qi) => {
+            const mine = answers[q.id]
+            let cls = 'palette-btn'
+            if (submitted && mine === q.correct_index) cls += ' palette-right'
+            else if (submitted && mine !== undefined) cls += ' palette-wrong'
+            else if (mine !== undefined) cls += ' palette-done'
+            return (
+              <button
+                key={q.id}
+                type="button"
+                className={cls}
+                onClick={() => scrollToQuestion(qi)}
+              >
+                {qi + 1}
+              </button>
+            )
+          })}
+        </div>
+      </div>
       {submitted && (
-        <div className="result">
-          Your score: {score} / {mcqs.length} ({Math.round((score / mcqs.length) * 100)}
-          %)
+        <div className="result score-card">
+          <div className="score-big">
+            {score} / {mcqs.length}
+          </div>
+          <div>{Math.round((score / mcqs.length) * 100)}% correct</div>
           <div className="muted">{savedMsg}</div>
         </div>
       )}
@@ -76,7 +136,8 @@ export function McqTest({ user, subject, mcqs, onDone }) {
         return (
           <div
             key={q.id}
-            className={`card ${correct ? 'ok' : ''} ${wrong ? 'bad' : ''}`}
+            id={`exam-q-${qi + 1}`}
+            className={`card exam-q ${correct ? 'ok' : ''} ${wrong ? 'bad' : ''}`}
           >
             <p>
               <strong>
@@ -134,6 +195,13 @@ export function SubjTest({ user, subject, shorts, longs, onDone }) {
   const [marks, setMarks] = useState({})
   const [submitted, setSubmitted] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
+  const elapsed = useElapsed(!submitted)
+  const plainText = (html) =>
+    String(html || '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .trim()
+  const writtenCount = all.filter((q) => plainText(written[q.id]) !== '').length
 
   async function submit() {
     const unmarked = all.filter((q) => !marks[q.id]).length
@@ -182,30 +250,65 @@ export function SubjTest({ user, subject, shorts, longs, onDone }) {
         {subject.code} — Subjective Test ({all.length} questions)
       </h2>
       <p className="muted">
-        Write your answer, then reveal the model answer and mark yourself
-        honestly: right, partial, or wrong.
+        Write your answer in the Word-like editor, then reveal the model answer
+        and mark yourself honestly: right, partial, or wrong.
       </p>
+      <div className="exam-bar">
+        <div className="exam-meta">
+          <span>
+            {writtenCount} / {all.length} written ·{' '}
+            {Object.keys(marks).length} / {all.length} self-marked
+          </span>
+          <span className="exam-timer">⏱ {fmtTime(elapsed)}</span>
+        </div>
+        <div className="exam-progress">
+          <div
+            className="exam-progress-fill"
+            style={{ width: `${all.length ? Math.round((writtenCount / all.length) * 100) : 0}%` }}
+          />
+        </div>
+        <div className="palette">
+          {all.map((q, qi) => {
+            let cls = 'palette-btn'
+            if (submitted && marks[q.id] === 'right') cls += ' palette-right'
+            else if (submitted && marks[q.id] === 'partial') cls += ' palette-partial'
+            else if (submitted && marks[q.id] === 'wrong') cls += ' palette-wrong'
+            else if (plainText(written[q.id]) !== '') cls += ' palette-done'
+            return (
+              <button
+                key={q.id}
+                type="button"
+                className={cls}
+                onClick={() => scrollToQuestion(qi)}
+              >
+                {qi + 1}
+              </button>
+            )
+          })}
+        </div>
+      </div>
       {submitted && counts && (
-        <div className="result">
-          Self-marked: {counts.right} right, {counts.partial} partial,{' '}
-          {counts.wrong} wrong (out of {all.length})
+        <div className="result score-card">
+          <div className="score-big">
+            {counts.right} right · {counts.partial} partial · {counts.wrong} wrong
+          </div>
+          <div>out of {all.length} questions</div>
           <div className="muted">{savedMsg}</div>
         </div>
       )}
       {all.map((q, qi) => (
-        <div key={q.id} className="card">
+        <div key={q.id} id={`exam-q-${qi + 1}`} className="card exam-q">
           <p>
             <strong>
               Q{qi + 1} ({q.kind}, {q.marks} marks). <Tex text={q.question} />
             </strong>{' '}
             <span className="muted">Lecture {q.lecture_no}</span>
           </p>
-          <textarea
-            rows={4}
-            placeholder="Write your answer here…"
+          <RichEditor
             value={written[q.id] || ''}
+            onChange={(html) => setWritten((w) => ({ ...w, [q.id]: html }))}
+            placeholder="Write your answer here…"
             disabled={submitted}
-            onChange={(e) => setWritten((w) => ({ ...w, [q.id]: e.target.value }))}
           />
           {!revealed[q.id] ? (
             <button onClick={() => setRevealed((r) => ({ ...r, [q.id]: true }))}>
