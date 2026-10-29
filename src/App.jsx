@@ -110,8 +110,11 @@ export default function App() {
 
   return (
     <div className="shell">
-      <header>
-        <h1>VU Test Papers</h1>
+      <header className="topbar">
+        <div className="brand">
+          <h1>VU Test Papers</h1>
+          <p className="tagline">Midterm practice · Lectures 1–22</p>
+        </div>
         <div className="nav">
           <button onClick={() => setView({ name: 'subjects' })}>Subjects</button>
           {user && <button onClick={() => setView({ name: 'progress' })}>My progress</button>}
@@ -132,19 +135,21 @@ export default function App() {
           </div>
         )}
         {!user && view.name !== 'auth' && (
-          <div className="card">
+          <div className="card welcome-card">
             <h2>Login required</h2>
             <p>
               Only students with an access code can take tests here. Log in, or
               sign up with the access code given by the admin.
             </p>
-            <button className="primary" onClick={() => setView({ name: 'auth' })}>
-              Login / Signup
-            </button>
+            <div className="actions">
+              <button className="primary" onClick={() => setView({ name: 'auth' })}>
+                Login / Signup
+              </button>
+            </div>
           </div>
         )}
         {view.name === 'auth' && !user && (
-          <form className="card" onSubmit={handleAuth}>
+          <form className="card auth-card" onSubmit={handleAuth}>
             <h2>{authMode === 'login' ? 'Login' : 'Signup'}</h2>
             <label className="field">
               <span>Email</span>
@@ -175,18 +180,20 @@ export default function App() {
               </label>
             )}
             {authMsg && <div className="result">{authMsg}</div>}
-            <button className="primary" type="submit">
-              {authMode === 'login' ? 'Login' : 'Create account'}
-            </button>{' '}
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode(authMode === 'login' ? 'signup' : 'login')
-                setAuthMsg('')
-              }}
-            >
-              {authMode === 'login' ? 'Need an account? Sign up' : 'Have an account? Log in'}
-            </button>
+            <div className="actions">
+              <button className="primary" type="submit">
+                {authMode === 'login' ? 'Login' : 'Create account'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode(authMode === 'login' ? 'signup' : 'login')
+                  setAuthMsg('')
+                }}
+              >
+                {authMode === 'login' ? 'Need an account? Sign up' : 'Have an account? Log in'}
+              </button>
+            </div>
           </form>
         )}
         {user && view.name === 'subjects' && (
@@ -237,12 +244,13 @@ function SubjectsList({ content, onTest }) {
   return (
     <div>
       <h2>Subjects</h2>
+      <div className="subjects-grid">
       {content.subjects.map((s) => {
         const nMcq = content.mcqs.filter((m) => m.subject_id === s.id).length
         const nShort = content.shorts.filter((q) => q.subject_id === s.id).length
         const nLong = content.longs.filter((q) => q.subject_id === s.id).length
         return (
-          <div key={s.id} className="card">
+          <div key={s.id} className="card subject-card">
             <h3>
               {s.code} — {s.name}
             </h3>
@@ -252,13 +260,16 @@ function SubjectsList({ content, onTest }) {
                 ? ' (no verified long section for this midterm)'
                 : ''}
             </p>
-            <button className="primary" onClick={() => onTest('mcq', s)}>
-              MCQ test
-            </button>{' '}
-            <button onClick={() => onTest('subj', s)}>Subjective test</button>
+            <div className="actions">
+              <button className="primary" onClick={() => onTest('mcq', s)}>
+                MCQ test
+              </button>
+              <button onClick={() => onTest('subj', s)}>Subjective test</button>
+            </div>
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
