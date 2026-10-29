@@ -42,6 +42,20 @@ export default function App() {
     refresh()
   }, [refresh])
 
+  useEffect(() => {
+    if (!user) {
+      setAdmin(false)
+      return
+    }
+    let live = true
+    fetchIsAdmin(user).then((v) => {
+      if (live) setAdmin(v)
+    })
+    return () => {
+      live = false
+    }
+  }, [user])
+
   async function handleAuth(e) {
     e.preventDefault()
     setAuthMsg('')
@@ -106,20 +120,6 @@ export default function App() {
       </div>
     )
   }
-
-  useEffect(() => {
-    if (!user) {
-      setAdmin(false)
-      return
-    }
-    let live = true
-    fetchIsAdmin(user).then((v) => {
-      if (live) setAdmin(v)
-    })
-    return () => {
-      live = false
-    }
-  }, [user])
 
   return (
     <div className="shell">
