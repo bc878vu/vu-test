@@ -39,3 +39,12 @@ manages additional admin roles. Math renders with KaTeX in proper format.
 - "Most important / repeated" means the questions are present in past-paper
   banks and core to the handout; no per-question past-paper frequency is
   claimed.
+
+## Database (moved 2026-10-30)
+
+The database lives in the EduNexus Supabase project (edunexus-app,
+cprpndovdfnkvekewstv) — one place for the whole website's data. The
+one-shot `supabase-tp-edunexus-move.sql` (base schema + admins + review +
+users + access code VU2026) was run in that project's SQL editor.
+Vercel env `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` point at that
+project. (Previously the AI CV Builder project's database was used.)
